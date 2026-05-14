@@ -41,19 +41,30 @@ clean:
 
 
 # Testing
-TEST_SRC := tests/test.c
+TEST_DIR := tests
 TEST_BIN_DIR := tests/bin
-TEST_BIN := $(TEST_BIN_DIR)/test
 
-.PHONY: test
+SIMPLE_TEST := simple_test
+STRESS_TEST := stress_test
+DEBUG := debug
 
-test: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_SRC) -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN)
-	@echo "Running test..."
-	./$(TEST_BIN)
+d: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(DEBUG).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(DEBUG)
+	@echo "Running debug..."
+	./$(TEST_BIN_DIR)/$(DEBUG)
+
+t: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(SIMPLE_TEST).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(SIMPLE_TEST)
+	@echo "Running simple test..."
+	./$(TEST_BIN_DIR)/$(SIMPLE_TEST)
+
+stress: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(STRESS_TEST).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(STRESS_TEST)
+	@echo "Running simple test..."
+	./$(TEST_BIN_DIR)/$(STRESS_TEST)
 
 bin:
 	mkdir -p tests/bin
 
-test_clean:
+t_clean:
 	rm -rf $(TEST_BIN_DIR) $(TEST_BIN)
