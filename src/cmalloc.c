@@ -10,8 +10,9 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
-#define SPAN_SIZE (64 * 1024)
-#define SPAN_ALIGNMENT (64 * 1024)
+#include "page_span_map.h"
+#include "types.h"
+
 #define LARGE_CLASS_SIZE_INDEX -1
 #define MAX_SIZE_CLASS 32768
 static const size_t SIZE_CLASSES[] = {
@@ -37,33 +38,8 @@ typedef struct bin_struct {
     int size_class_index;
 } bin_t;
 
-typedef struct span {
-    void *mmap_true_pointer;
-    struct span *next;
-
-    size_t span_size;
-    size_t span_alignment;
-
-    int size_class_index;
-
-    size_t block_size;
-    size_t block_count;
-
-    size_t free_count;
-} span_t;
-
 bin_t bins[SIZE_CLASS_COUNT];
 span_t *span_head;
-
-/**
- * @brief Returns the span that ptr falls under.
- */
-static inline span_t *get_span(void *ptr) {
-    assert(ptr);
-    uintptr_t ptr_num = (uintptr_t) ptr;
-    ptr_num = (uintptr_t)SPAN_ALIGNMENT * (uintptr_t)floor((double)ptr_num / (double)SPAN_ALIGNMENT);
-    return (span_t *)ptr_num;
-}
 
 /**
  * @brief Returns the size class index of the given size.
@@ -79,15 +55,6 @@ static inline int get_size_class_index(size_t size) {
 }
 
 /**
- * @brief Returns the given pointer to a multiple of alignment, rounded up.
- */
-static inline void *align_pointer_ceil(void *ptr, unsigned long alignment) {
-    assert(alignment != 0);
-    uintptr_t ptr_num = (uintptr_t) ptr;
-    return (void *)((uintptr_t)alignment * (uintptr_t)ceil((double)ptr_num / (double)alignment));
-}
-
-/**
  * @brief Allocates space for a new span.
  * Adds new span to the span list.
  * Assigns variables already and adds free blocks to the according bin.
@@ -98,7 +65,7 @@ static inline span_t *allocate_new_span(int size_class_index) {
     assert((unsigned long) size_class_index < SIZE_CLASS_COUNT);
 
     // Get memory from system call
-    size_t request_size = SPAN_ALIGNMENT + SPAN_SIZE;
+    size_t request_size = PAGE_SIZE * SPAN_PAGE_COUNT;
     void *true_pointer = mmap(NULL,
         request_size,
         PROT_READ | PROT_WRITE,
@@ -108,11 +75,9 @@ static inline span_t *allocate_new_span(int size_class_index) {
     if (true_pointer == MAP_FAILED) return NULL;
 
     // Initialize span variables
-    span_t *new = (span_t *)align_pointer_ceil(true_pointer, SPAN_ALIGNMENT);
-    new->span_size = SPAN_SIZE;
-    new->span_alignment = SPAN_ALIGNMENT;
+    span_t *new = (span_t *)true_pointer;
+    new->span_size = request_size;
     new->size_class_index = size_class_index;
-    new->mmap_true_pointer = true_pointer;
 
     int block_size = SIZE_CLASSES[size_class_index];
     new->block_size = block_size;
@@ -120,6 +85,8 @@ static inline span_t *allocate_new_span(int size_class_index) {
     new->free_count = new->block_count;
 
     new->next = span_head;
+    if (span_head) span_head->prev = new;
+    new->prev = NULL;
     span_head = new;
 
     char *block_start_address = (char *)new + sizeof(span_t);
@@ -128,6 +95,7 @@ static inline span_t *allocate_new_span(int size_class_index) {
         block->next = bins[size_class_index].free_list;
         bins[size_class_index].free_list = block;
     }
+    insert_span(new);
     return new;
 }
 
@@ -137,18 +105,19 @@ static inline span_t *allocate_new_span(int size_class_index) {
  */
 void *cmalloc(size_t size) {
     int size_class_index = get_size_class_index(size);
-    if (size_class_index == -1) {
+    if (size_class_index != -1) {
+        if (bins[size_class_index].free_list == NULL) {
+            allocate_new_span(size_class_index);
+        }
+        
+        free_block_t *block = bins[size_class_index].free_list;
+        get_span(get_page_index(block))->free_count--;
+        bins[size_class_index].free_list = bins[size_class_index].free_list->next;
+        return block;
+    } else {
         printf("TOO BIG OF ALLOCATION. NOT IMPLEMENTED YET\n");
         return NULL;
     }
-    if (bins[size_class_index].free_list == NULL) {
-        allocate_new_span(size_class_index);
-    }
-    
-    free_block_t *block = bins[size_class_index].free_list;
-    get_span(block)->free_count--;
-    bins[size_class_index].free_list = bins[size_class_index].free_list->next;
-    return block;
 }
 
 /**
@@ -156,8 +125,25 @@ void *cmalloc(size_t size) {
  */
 void cfree(void *ptr) {
     if (ptr == NULL) return;
-    span_t *span = get_span(ptr);
+    span_t *span = get_span(get_page_index(ptr));
     span->free_count++;
     ((free_block_t *)ptr)->next = bins[span->size_class_index].free_list;
     bins[span->size_class_index].free_list = ptr;
+
+    if (span->free_count >= span->block_count) {
+        free_block_t **block = &(bins[span->size_class_index].free_list);
+        while (*block) {
+            if (span == get_span(get_page_index(*block))) {
+                *block = (*block)->next;
+                continue;
+            }
+            block = &((*block)->next);
+        }
+        
+        if (span == span_head) span_head = span->next;
+        if (span->next) span->next->prev = span->prev;
+        if (span->prev) span->prev->next = span->next;
+        remove_span(span);
+        munmap(span, span->span_size);
+    }
 }

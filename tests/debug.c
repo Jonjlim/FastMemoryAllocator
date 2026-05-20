@@ -10,11 +10,11 @@ typedef struct data_struct {
 
 int main() {
 
-    printf("Mallocing\n");
+    printf("Mallocing data_null\n");
     data_t *data_null = cmalloc(sizeof(data_t));
     printf("    c: %c, n: %d, l: %ld\n", data_null->c, data_null->n, data_null->l);
 
-    printf("Mallocing\n");
+    printf("Mallocing data, a, 10, 256\n");
     data_t *data = cmalloc(sizeof(data_t));
     printf("    Setting Data\n");
     data->c = 'a';
@@ -23,7 +23,7 @@ int main() {
 
     printf("    c: %c, n: %d, l: %ld\n", data->c, data->n, data->l);
 
-    printf("Mallocing\n");
+    printf("Mallocing data1, b, 20, 1\n");
     data_t *data1 = cmalloc(sizeof(data_t));
     printf("    Setting Data\n");
     data1->c = 'b';
