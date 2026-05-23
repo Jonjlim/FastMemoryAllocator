@@ -9,8 +9,6 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
-#include "types.h"
-
 #define L1_BITS 12
 #define L2_BITS 12
 #define L3_BITS 11
@@ -29,10 +27,7 @@ typedef struct l2_trie_node_struct {
 } l2_node;
 static l2_node *l1[L1_SIZE];
 
-/**
- * @brief Maps the page_index to a span.
- */
-void insert_span(span_t *span) {
+void cmalloc_map_span(span_t *span) {
     for (size_t i = 0; i < span->span_size / PAGE_SIZE; i++) {
         u_int64_t page_index = get_page_index(span) + i;
         u_int64_t l1_index = (page_index >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
@@ -61,10 +56,7 @@ void insert_span(span_t *span) {
     }
 }
 
-/**
- * @brief Removes all mapping from page_index to the span.
- */
-void remove_span(span_t *span) {
+void cmalloc_unmap_span(span_t *span) {
     for (size_t i = 0; i < span->span_size / PAGE_SIZE; i++) {
         u_int64_t page_index = get_page_index(span) + i;
         u_int64_t l1_index = (page_index >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
@@ -88,10 +80,7 @@ void remove_span(span_t *span) {
     }
 }
 
-/**
- * @brief Gets the span that page_index is mapped to.
- */
-span_t *get_span(u_int64_t page_index) {
+span_t *cmalloc_get(u_int64_t page_index) {
     u_int64_t l1_index = (page_index >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
     u_int64_t l2_index = (page_index >> L3_BITS) & (L2_SIZE - 1);
     u_int64_t l3_index = (page_index) & (L3_SIZE - 1);
