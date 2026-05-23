@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cmalloc/cmalloc.h>
@@ -44,17 +45,48 @@ int main() {
     data_t *data2 = cmalloc(sizeof(data_t));
     printf("    c: %c, n: %d, l: %ld\n", data2->c, data2->n, data2->l);
 
-    // fprint("Callocing\n");
-    // data_t *datas = ccalloc(2, sizeof(data));
+    printf("\nSmall allocing 32768x\n");
+    for (int i = 0; i < 32768; i++) {
+        void *ptr = cmalloc(i);
+        cfree(ptr);
+    }
+    printf("Success\n\n");
 
-    // fprint("    c: %c, n: %d, l: %ld\n", datas[0].c, datas[0].n, datas[0].l);
-    // fprint("    c: %c, n: %d, l: %ld\n", datas[1].c, datas[1].n, datas[1].l);
 
-    // fprint("Reallocing\n");
-    // datas = crealloc(datas, sizeof(data) * 3);
-    // fprint("    c: %c, n: %d, l: %ld\n", datas[0].c, datas[0].n, datas[0].l);
-    // fprint("    c: %c, n: %d, l: %ld\n", datas[1].c, datas[1].n, datas[1].l);
-    // fprint("    c: %c, n: %d, l: %ld\n", datas[2].c, datas[2].n, datas[2].l);
+    printf("Large Malloc\n");
+    void *large_alloc = cmalloc(65536);
+    *((int *) large_alloc) = 10;
+    *((char *)((char *) large_alloc + 4)) = 'b';
+    *((long *)((char *) large_alloc + 8)) = 256;
+    *((char *)((char *) large_alloc + 65536 - 1)) = 'a';
+    printf("    byte 0: %d, byte 4: %c, byte 8: %ld, byte 65535: %c\n", 
+        *((int *) large_alloc),
+        *((char *)((char *) large_alloc + 4)),
+        *((long *)((char *) large_alloc + 8)),
+        *((char *)((char *) large_alloc + 65536 - 1)));
+    printf("Freeing large malloc\n");
+    cfree(large_alloc);
+
+    printf("Super big malloc:\n");
+    large_alloc = cmalloc(65536 * 100);
+    cfree(large_alloc);
+    printf("Success:\n");
+
+    printf("\nLarge mallocing 100x:\n");
+    void *ptrs[100];
+    for (int i = 0; i < 100; i++) {
+        ptrs[i] = cmalloc(65536 * i);
+        void *ptr = ptrs[i];
+        assert(ptr);
+        *((int *) ptr) = 10;
+        *((char *)((char *) ptr + 4)) = 'b';
+        *((long *)((char *) ptr + 8)) = 256;
+        *((char *)((char *) ptr + 65536 - 1)) = 'a';
+    }
+    for (int i = 0 ; i < 100; i++) {
+        cfree(ptrs[i]);
+    }
+    printf("Success\n\n");
 
     return 0;
 }

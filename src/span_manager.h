@@ -33,12 +33,6 @@ static inline size_t get_span_md_size(span_t *span) {
     return sizeof(*span);
 }
 /**
- * @brief Returns the pointer to the starting data, after the spans metadata.
- */
-static inline void *get_span_block_start_address(span_t *span) {
-    return ((char *) span) + get_span_md_size(span);
-}
-/**
  * @brief Returns a free block and marks it as allocated.
  */
 static inline void *allocate_block(span_t *span) {

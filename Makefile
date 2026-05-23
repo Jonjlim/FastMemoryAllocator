@@ -45,8 +45,19 @@ TEST_DIR := tests
 TEST_BIN_DIR := tests/bin
 
 SIMPLE_TEST := simple_test
-STRESS_TEST := stress_test
 DEBUG := debug
+RIGOR := rigor_test
+LONG_RIGOR := long_rigor_test
+
+r: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(RIGOR)
+	@echo "Running long rigor..."
+	./$(TEST_BIN_DIR)/$(RIGOR)
+
+lr: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(LONG_RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(LONG_RIGOR)
+	@echo "Running long rigor..."
+	./$(TEST_BIN_DIR)/$(LONG_RIGOR)
 
 d: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(DEBUG).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(DEBUG)
@@ -57,11 +68,6 @@ t: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(SIMPLE_TEST).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(SIMPLE_TEST)
 	@echo "Running simple test..."
 	./$(TEST_BIN_DIR)/$(SIMPLE_TEST)
-
-stress: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(STRESS_TEST).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(STRESS_TEST)
-	@echo "Running simple test..."
-	./$(TEST_BIN_DIR)/$(STRESS_TEST)
 
 bin:
 	mkdir -p tests/bin
