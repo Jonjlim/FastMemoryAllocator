@@ -27,6 +27,7 @@
 #define TIME_BUDGET_SEC 4.0
 #endif
 
+#define RNG_SEED 88172645463325252ULL
 #define ALIGNMENT 16
 #define FRONT_CANARY 0xCAFEBABEDEADBEEFULL
 #define BACK_CANARY  0xBADC0FFEE0DDF00DULL
@@ -41,7 +42,7 @@ typedef struct {
   uint64_t pattern;
 } live_block_t;
 
-static uint64_t rng_state = 88172645463325252ULL;
+static uint64_t rng_state = RNG_SEED;
 
 static uint64_t rng_u64(void) {
   uint64_t x = rng_state;
@@ -51,6 +52,8 @@ static uint64_t rng_u64(void) {
   rng_state = x;
   return x;
 }
+
+static void rng_reset(void) { rng_state = RNG_SEED; }
 
 static size_t rand_size(void) {
   uint64_t r = rng_u64() % 100;
@@ -149,24 +152,18 @@ static void checked_free(free_fn dealloc, live_block_t *b) {
   b->pattern = 0;
 }
 
-static void run_alignment_test(const char *name,
-                               alloc_fn alloc,
-                               free_fn dealloc) {
+static void run_alignment_test(alloc_fn alloc, free_fn dealloc) {
   for (size_t size = 1; size <= 4096; size++) {
     void *p = alloc(size);
 
     if (!p) {
-      fprintf(stderr,
-              "%s failed alignment allocation size=%zu\n",
-              name,
-              size);
+      fprintf(stderr, "alignment allocation failed size=%zu\n", size);
       abort();
     }
 
     if ((uintptr_t)p % ALIGNMENT != 0) {
       fprintf(stderr,
-              "%s returned misaligned pointer %p for size %zu\n",
-              name,
+              "misaligned pointer %p for size %zu\n",
               p,
               size);
       abort();
@@ -175,14 +172,11 @@ static void run_alignment_test(const char *name,
     memset(p, 0xAA, size);
     dealloc(p);
   }
-
-  printf("%-16s alignment: passed\n", name);
 }
 
-static void run_size_class_bench(const char *name,
-                                 alloc_fn alloc,
-                                 free_fn dealloc,
-                                 size_t size) {
+static double run_size_class_bench(alloc_fn alloc,
+                                   free_fn dealloc,
+                                   size_t size) {
   size_t n = MAX_LIVE;
   size_t rounds = 20;
 
@@ -214,7 +208,7 @@ static void run_size_class_bench(const char *name,
       ptrs[i] = alloc(size);
 
       if (!ptrs[i]) {
-        fprintf(stderr, "%s failed size %zu\n", name, size);
+        fprintf(stderr, "allocation failed size %zu\n", size);
         abort();
       }
 
@@ -226,21 +220,13 @@ static void run_size_class_bench(const char *name,
     }
   }
 
-  double end = now_sec();
-
-  printf("%-16s fixed size %6zu n=%zu rounds=%zu: %.3f sec\n",
-         name,
-         size,
-         n,
-         rounds,
-         end - start);
+  double elapsed = now_sec() - start;
 
   free(ptrs);
+  return elapsed;
 }
 
-static void run_fragmentation_test(const char *name,
-                                   alloc_fn alloc,
-                                   free_fn dealloc) {
+static double run_fragmentation_test(alloc_fn alloc, free_fn dealloc) {
   enum { N = 10000 };
 
   void **small = malloc(N * sizeof(void *));
@@ -258,7 +244,7 @@ static void run_fragmentation_test(const char *name,
     large[i] = alloc(4096);
 
     if (!small[i] || !large[i]) {
-      fprintf(stderr, "%s fragmentation allocation failed\n", name);
+      fprintf(stderr, "fragmentation allocation failed\n");
       abort();
     }
 
@@ -279,7 +265,7 @@ static void run_fragmentation_test(const char *name,
     large[i] = alloc(2048);
 
     if (!small[i] || !large[i]) {
-      fprintf(stderr, "%s fragmentation refill failed\n", name);
+      fprintf(stderr, "fragmentation refill failed\n");
       abort();
     }
 
@@ -292,17 +278,14 @@ static void run_fragmentation_test(const char *name,
     dealloc(large[i]);
   }
 
-  double end = now_sec();
-
-  printf("%-16s fragmentation: %.3f sec\n", name, end - start);
+  double elapsed = now_sec() - start;
 
   free(small);
   free(large);
+  return elapsed;
 }
 
-static void run_random_stress(const char *name,
-                              alloc_fn alloc,
-                              free_fn dealloc) {
+static double run_random_stress(alloc_fn alloc, free_fn dealloc) {
   live_block_t *live = calloc(MAX_LIVE, sizeof(live_block_t));
 
   if (!live) {
@@ -311,9 +294,6 @@ static void run_random_stress(const char *name,
   }
 
   size_t live_count = 0;
-  size_t allocs = 0;
-  size_t frees = 0;
-  size_t peak_live = 0;
   size_t op = 0;
 
   double start = now_sec();
@@ -330,13 +310,7 @@ static void run_random_stress(const char *name,
       }
 
       checked_alloc(alloc, rand_size(), &live[idx]);
-
       live_count++;
-      allocs++;
-
-      if (live_count > peak_live) {
-        peak_live = live_count;
-      }
     } else {
       size_t idx = rng_u64() % MAX_LIVE;
 
@@ -345,9 +319,7 @@ static void run_random_stress(const char *name,
       }
 
       checked_free(dealloc, &live[idx]);
-
       live_count--;
-      frees++;
     }
 
     if ((op & 0xffff) == 0) {
@@ -363,52 +335,79 @@ static void run_random_stress(const char *name,
   for (size_t i = 0; i < MAX_LIVE; i++) {
     if (live[i].raw) {
       checked_free(dealloc, &live[i]);
-      frees++;
     }
   }
 
-  double end = now_sec();
-
-  printf("%-16s random stress: %.3f sec | ops=%zu allocs=%zu frees=%zu "
-         "peak_live=%zu\n",
-         name,
-         end - start,
-         op,
-         allocs,
-         frees,
-         peak_live);
+  double elapsed = now_sec() - start;
 
   free(live);
+  return elapsed;
 }
 
-static void run_all(const char *name, alloc_fn alloc, free_fn dealloc) {
-  printf("\n=== %s ===\n", name);
+static void print_time_cmp(const char *label,
+                           double malloc_sec,
+                           double cmalloc_sec) {
+  if (malloc_sec <= 0.0) {
+    printf("%-28s  malloc %.3fs  cmalloc %.3fs  (n/a)\n",
+           label,
+           malloc_sec,
+           cmalloc_sec);
+    return;
+  }
 
-  run_alignment_test(name, alloc, dealloc);
-
-  run_size_class_bench(name, alloc, dealloc, 8);
-  run_size_class_bench(name, alloc, dealloc, 16);
-  run_size_class_bench(name, alloc, dealloc, 32);
-  run_size_class_bench(name, alloc, dealloc, 64);
-  run_size_class_bench(name, alloc, dealloc, 128);
-  run_size_class_bench(name, alloc, dealloc, 256);
-  run_size_class_bench(name, alloc, dealloc, 1024);
-  run_size_class_bench(name, alloc, dealloc, 4096);
-  run_size_class_bench(name, alloc, dealloc, 65536);
-
-  run_fragmentation_test(name, alloc, dealloc);
-  run_random_stress(name, alloc, dealloc);
+  double pct = (cmalloc_sec / malloc_sec) * 100.0;
+  printf("%-28s  malloc %.3fs  cmalloc %.3fs  cmalloc %.1f%% of malloc\n",
+         label,
+         malloc_sec,
+         cmalloc_sec,
+         pct);
 }
 
 int main(void) {
+  static const size_t bench_sizes[] = {
+      8, 16, 32, 64, 128, 256, 1024, 4096, 65536};
+
   printf("OPS=%d MAX_LIVE=%d MAX_SIZE=%d TIME_BUDGET_SEC=%.2f\n",
          OPS,
          MAX_LIVE,
          MAX_SIZE,
          TIME_BUDGET_SEC);
+  printf("Percent = cmalloc time as %% of malloc (lower is faster for cmalloc)\n\n");
 
-  run_all("stdlib", malloc, free);
-  run_all("cmalloc", cmalloc, cfree);
+  printf("alignment (correctness)\n");
+  run_alignment_test(malloc, free);
+  run_alignment_test(cmalloc, cfree);
+  printf("  malloc and cmalloc: passed\n\n");
+
+  printf("benchmark                    malloc      cmalloc     cmalloc %% of malloc\n");
+  printf("--------------------------------------------------------------------------\n");
+
+  for (size_t i = 0; i < sizeof(bench_sizes) / sizeof(bench_sizes[0]); i++) {
+    size_t size = bench_sizes[i];
+    char label[32];
+    snprintf(label, sizeof(label), "fixed size %6zu", size);
+
+    double malloc_sec = run_size_class_bench(malloc, free, size);
+    double cmalloc_sec = run_size_class_bench(cmalloc, cfree, size);
+    print_time_cmp(label, malloc_sec, cmalloc_sec);
+  }
+
+  {
+    double malloc_sec = run_fragmentation_test(malloc, free);
+    double cmalloc_sec = run_fragmentation_test(cmalloc, cfree);
+    print_time_cmp("fragmentation", malloc_sec, cmalloc_sec);
+  }
+
+  {
+    double malloc_sec;
+    double cmalloc_sec;
+
+    rng_reset();
+    malloc_sec = run_random_stress(malloc, free);
+    rng_reset();
+    cmalloc_sec = run_random_stress(cmalloc, cfree);
+    print_time_cmp("random stress", malloc_sec, cmalloc_sec);
+  }
 
   return 0;
 }

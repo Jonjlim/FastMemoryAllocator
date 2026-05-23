@@ -64,6 +64,7 @@ typedef struct free_block_struct {
 
 typedef struct span_struct {
     struct span_struct *next;
+    struct span_struct *prev;
     size_t span_size;
     
     int size_class_index;
