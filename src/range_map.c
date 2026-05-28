@@ -2,7 +2,7 @@
  * @author Jonathon Lim
  */
 
-#include "page_span_map.h"
+#include "range_map.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -27,12 +27,11 @@ typedef struct l2_trie_node_struct {
 } l2_node;
 static l2_node *l1[L1_SIZE];
 
-void cmalloc_map_span(span_t *span) {
-    for (size_t i = 0; i < span->span_size / PAGE_SIZE; i++) {
-        u_int64_t page_index = get_page_index(span) + i;
-        u_int64_t l1_index = (page_index >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
-        u_int64_t l2_index = (page_index >> L3_BITS) & (L2_SIZE - 1);
-        u_int64_t l3_index = (page_index) & (L3_SIZE - 1);
+void cmalloc_map_range(void *data, uint64_t from, uint64_t to) {
+    for (u_int64_t i = from; i < to; i++) {
+        u_int64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
+        u_int64_t l2_index = (i >> L3_BITS) & (L2_SIZE - 1);
+        u_int64_t l3_index = (i) & (L3_SIZE - 1);
 
         if (!l1[l1_index]) {
             l1[l1_index] = mmap(NULL,
@@ -52,16 +51,15 @@ void cmalloc_map_span(span_t *span) {
             l1[l1_index]->count++;
         }
         l1[l1_index]->l2[l2_index]->count++;
-        l1[l1_index]->l2[l2_index]->l3[l3_index] = span;
+        l1[l1_index]->l2[l2_index]->l3[l3_index] = data;
     }
 }
 
-void cmalloc_unmap_span(span_t *span) {
-    for (size_t i = 0; i < span->span_size / PAGE_SIZE; i++) {
-        u_int64_t page_index = get_page_index(span) + i;
-        u_int64_t l1_index = (page_index >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
-        u_int64_t l2_index = (page_index >> L3_BITS) & (L2_SIZE - 1);
-        u_int64_t l3_index = (page_index) & (L3_SIZE - 1);
+void cmalloc_unmap_range(uint64_t from, uint64_t to) {
+    for (uint64_t i = from; i < to; i++) {
+        u_int64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
+        u_int64_t l2_index = (i >> L3_BITS) & (L2_SIZE - 1);
+        u_int64_t l3_index = (i) & (L3_SIZE - 1);
 
         assert(l1[l1_index]);
         assert(l1[l1_index]->l2[l2_index]);
@@ -80,10 +78,10 @@ void cmalloc_unmap_span(span_t *span) {
     }
 }
 
-span_t *cmalloc_get(u_int64_t page_index) {
-    u_int64_t l1_index = (page_index >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
-    u_int64_t l2_index = (page_index >> L3_BITS) & (L2_SIZE - 1);
-    u_int64_t l3_index = (page_index) & (L3_SIZE - 1);
+void *cmalloc_get(u_int64_t key) {
+    u_int64_t l1_index = (key >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
+    u_int64_t l2_index = (key >> L3_BITS) & (L2_SIZE - 1);
+    u_int64_t l3_index = (key) & (L3_SIZE - 1);
 
     if (!l1[l1_index] || !(l1[l1_index]->l2[l2_index])) return NULL;
     return l1[l1_index]->l2[l2_index]->l3[l3_index];
