@@ -11,7 +11,7 @@ SHARED_LIB := $(LIB_DIR)/lib$(LIB_NAME).so
 
 # Compiler and Flags
 CC      := gcc
-CFLAGS  := -Wall -Wextra -O2 -fPIC
+CFLAGS  := -Wall -Wextra -flto -O3 -fPIC
 CPPFLAGS := -I$(INC_DIR)
 
 # Files
