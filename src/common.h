@@ -40,6 +40,7 @@ static inline int get_system_page_shift() {
 #endif
 
 #include <stdlib.h>
+#include <stdint.h>
 
 #define BYTE_ALIGNMENT 16
 #define MAX_FREE_SPAN_COUNT 3
@@ -55,12 +56,33 @@ static const size_t SIZE_CLASSES[] = {
     5120, 6144, 7168, 8192,
     16384, 32768
 };
+static const size_t SIZE_CLASS_SPAN_SIZE[] = {
+    65536, 65536, 65536, 65536, 65536, 65536, 65536, 65536,
+    65536, 65536, 65536, 65536, 65536, 65536, 65536, 65536,
+
+    131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072,
+    131072, 131072, 131072, 131072, 131072, 131072, 131072, 131072,
+
+    262144, 262144, 262144, 262144, 262144, 262144,
+
+    524288, 524288, 524288, 524288,
+    524288, 524288, 524288, 524288,
+
+    1048576, 1048576
+};
+static const size_t SIZE_CLASS_BLOCK_COUNT[] = {
+    4096, 2048, 1365, 1024, 819, 682, 585, 512,
+    455, 409, 372, 341, 315, 292, 273, 256,
+    455, 409, 372, 341, 315, 292, 273, 256,
+    227, 204, 186, 170, 157, 146, 136, 128,
+    227, 204, 186, 170, 146, 128,
+    204, 170, 146, 128,
+    102, 85, 73, 64,
+    64, 32
+};
+
 #define SIZE_CLASS_COUNT \
     (sizeof(SIZE_CLASSES) / sizeof(SIZE_CLASSES[0]))
-
-typedef struct free_block_struct {
-    struct free_block_struct *next;
-} free_block_t;
 
 typedef struct span_struct {
     struct span_struct *next;
@@ -73,9 +95,10 @@ typedef struct span_struct {
 
     size_t free_count;
     
-    struct free_block_struct *free_list;
-
     void *data_address;
+    
+    uint64_t nonfull_bitmap;
+    uint64_t *block_bitmap;
 } span_t;
 
 /**
