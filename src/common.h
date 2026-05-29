@@ -84,23 +84,6 @@ static const size_t SIZE_CLASS_BLOCK_COUNT[] = {
 #define SIZE_CLASS_COUNT \
     (sizeof(SIZE_CLASSES) / sizeof(SIZE_CLASSES[0]))
 
-typedef struct span_struct {
-    struct span_struct *next;
-    struct span_struct *prev;
-    size_t span_size;
-    
-    int size_class_index;
-    size_t block_size;
-    size_t block_count;
-
-    size_t free_count;
-    
-    void *data_address;
-    
-    uint64_t nonfull_bitmap;
-    uint64_t *block_bitmap;
-} span_t;
-
 /**
  * @brief Returns the page index of the ptr.
  */

@@ -2,7 +2,7 @@
  * @author Jonathon Lim
  */
 
-#include "span_manager.h"
+#include "span.h"
 
 #include <assert.h>
 #include <stdlib.h>

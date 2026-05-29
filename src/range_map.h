@@ -7,7 +7,7 @@
 #ifndef __RANGE_MAP_H__
 #define __RANGE_MAP_H__
 
-#include "common.h"
+#include <stdlib.h>
 
 /**
  * @brief Maps a range of integers to some data.

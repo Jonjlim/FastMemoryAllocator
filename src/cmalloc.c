@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
-#include "span_manager.h"
+#include "span.h"
 #include "common.h"
 
 typedef struct bin_struct {

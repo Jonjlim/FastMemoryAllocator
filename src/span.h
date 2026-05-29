@@ -2,11 +2,28 @@
  * @author Jonathon Lim
  */
 
-#ifndef __SPAN_MANAGER_H__
-#define __SPAN_MANAGER_H__
+#ifndef __SPAN_H__
+#define __SPAN_H__
 
 #include "common.h"
 #include <stdio.h>
+
+typedef struct span_struct {
+    struct span_struct *next;
+    struct span_struct *prev;
+    size_t span_size;
+    
+    int size_class_index;
+    size_t block_size;
+    size_t block_count;
+
+    size_t free_count;
+    
+    void *data_address;
+    
+    uint64_t nonfull_bitmap;
+    uint64_t *block_bitmap;
+} span_t;
 
 /**
  * @brief Initializes a span given an address space.
