@@ -6,7 +6,6 @@
 #define __SPAN_H__
 
 #include "common.h"
-#include <stdio.h>
 
 typedef struct span_struct {
     struct span_struct *next;
@@ -47,7 +46,7 @@ size_t cmalloc_calculate_span_size(size_t requested_size, int size_class_index);
  * @brief Returns the size of a span's metadata.
  */
 static inline size_t get_span_md_size(size_t block_count) {
-    return sizeof(span_t) + (((block_count + (size_t)63) & ~63) >> 3);
+    return align_up(sizeof(span_t) + (((block_count + (size_t)63) & ~63) >> 3));
 }
 /**
  * @brief Returns a free block and marks it as allocated.

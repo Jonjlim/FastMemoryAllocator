@@ -10,10 +10,12 @@
 
 #include "range_map.h"
 
-#define SPAN_PAGE_COUNT ((PAGE_SIZE == 16384) ? 4 : \
-                         (PAGE_SIZE == 4096)  ? 16 : 16)
+static range_map_t *map = NULL;
 
 span_t *cmalloc_initialize_span(void *ptr, size_t size, int size_class_index) {
+    if (map == NULL) map = cmalloc_initialize_range_map();
+    assert(map);
+
     span_t *new = (span_t *)ptr;
     new->span_size = size;
     new->size_class_index = size_class_index;
@@ -27,7 +29,7 @@ span_t *cmalloc_initialize_span(void *ptr, size_t size, int size_class_index) {
     }
     new->free_count = new->block_count;
     new->data_address = align_up_ptr((char *) new + get_span_md_size(new->block_count));
-    cmalloc_map_range(new, get_page_index(new), get_page_index(new) + ((new->span_size + PAGE_SIZE - 1) >> PAGE_SHIFT));
+    cmalloc_map_range(map, new, get_page_index(new), get_page_index(new) + ((new->span_size + PAGE_SIZE - 1) >> PAGE_SHIFT));
 
     new->block_bitmap = (uint64_t *) ((char *) new + sizeof(span_t));
     size_t count = (new->block_count + (size_t) 63) & ~63;
@@ -43,17 +45,17 @@ span_t *cmalloc_initialize_span(void *ptr, size_t size, int size_class_index) {
 }
 
 void cmalloc_uninitialize_span(span_t *span) {
-    cmalloc_unmap_range(get_page_index(span), get_page_index(span) + ((span->span_size + PAGE_SIZE - 1) >> PAGE_SHIFT));
+    cmalloc_unmap_range(map, get_page_index(span), get_page_index(span) + ((span->span_size + PAGE_SIZE - 1) >> PAGE_SHIFT));
 }
 
 span_t *cmalloc_get_span(void *ptr) {
-    return cmalloc_get(get_page_index(ptr));
+    return cmalloc_get(map, get_page_index(ptr));
 }
 
 size_t cmalloc_calculate_span_size(size_t requested_size, int size_class_index) {
     if (size_class_index != LARGE_CLASS_SIZE_INDEX) {
-        return SIZE_CLASS_SPAN_SIZE[size_class_index] + align_up(get_span_md_size(SIZE_CLASS_BLOCK_COUNT[size_class_index]));
+        return SIZE_CLASS_SPAN_SIZE[size_class_index] + get_span_md_size(SIZE_CLASS_BLOCK_COUNT[size_class_index]);
     } else {
-        return ((requested_size + (BYTE_ALIGNMENT - 1)) & ~(BYTE_ALIGNMENT - 1)) + align_up(get_span_md_size(1));
+        return ((requested_size + (BYTE_ALIGNMENT - 1)) & ~(BYTE_ALIGNMENT - 1)) + get_span_md_size(1);
     }
 }
