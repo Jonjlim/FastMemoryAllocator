@@ -22,6 +22,6 @@ void *cmalloc_alloc_metadata(size_t size);
 void cmalloc_free_metadata(void *ptr, size_t size);
 
 void *cmalloc_alloc_data(size_t size);
-void *cmalloc_free_data(void *ptr, size_t size);
+void cmalloc_free_data(void *ptr, size_t size);
 
 #endif

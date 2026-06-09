@@ -60,3 +60,15 @@ void cmalloc_free_metadata(void *ptr, size_t size) {
     }
     cmalloc_map(free_list_map, ptr, size);
 }
+
+void *cmalloc_alloc_data(size_t size) {
+    return mmap(NULL,
+        size,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS,
+        -1,
+        0);
+}
+void cmalloc_free_data(void *ptr, size_t size) {
+    munmap(ptr, size);
+}
