@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "arena_manager.h"
 
@@ -35,16 +36,18 @@ range_map_t *cmalloc_initialize_range_map() {
 
 void cmalloc_map(range_map_t *range_map, void *value, uint64_t key) {
     l1_node *l1 = (l1_node *)range_map;
-    int i = key;
-    u_int64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
-    u_int64_t l2_index = (i >> L3_BITS) & (L2_SIZE - 1);
-    u_int64_t l3_index = (i) & (L3_SIZE - 1);
+    uint64_t i = key;
+    uint64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
+    uint64_t l2_index = (i >> L3_BITS) & (L2_SIZE - 1);
+    uint64_t l3_index = (i) & (L3_SIZE - 1);
 
     if (!(l1->l1)[l1_index]) {
         (l1->l1)[l1_index] = cmalloc_alloc_metadata(sizeof(l2_node));
+        memset((l1->l1)[l1_index], 0, sizeof(l2_node));
     }
     if (!((l1->l1)[l1_index]->l2[l2_index])) {
         (l1->l1)[l1_index]->l2[l2_index] = cmalloc_alloc_metadata(sizeof(l3_node));
+        memset((l1->l1)[l1_index]->l2[l2_index], 0, sizeof(l3_node));
         (l1->l1)[l1_index]->count++;
     }
     if ((l1->l1)[l1_index]->l2[l2_index]->l3[l3_index] == NULL)
@@ -54,10 +57,10 @@ void cmalloc_map(range_map_t *range_map, void *value, uint64_t key) {
 
 void cmalloc_unmap(range_map_t *range_map, uint64_t key) {
     l1_node *l1 = (l1_node *)range_map;
-    int i = key;
-    u_int64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
-    u_int64_t l2_index = (i >> L3_BITS) & (L2_SIZE - 1);
-    u_int64_t l3_index = (i) & (L3_SIZE - 1);
+    uint64_t i = key;
+    uint64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
+    uint64_t l2_index = (i >> L3_BITS) & (L2_SIZE - 1);
+    uint64_t l3_index = (i) & (L3_SIZE - 1);
 
     assert((l1->l1)[l1_index]);
     assert((l1->l1)[l1_index]->l2[l2_index]);
@@ -76,7 +79,7 @@ void cmalloc_unmap(range_map_t *range_map, uint64_t key) {
 }
 
 void cmalloc_map_range(range_map_t *range_map, void *data, uint64_t from, uint64_t to) {
-    for (u_int64_t i = from; i < to; i++) {
+    for (uint64_t i = from; i < to; i++) {
         cmalloc_map(range_map, data, i);
     }
 }

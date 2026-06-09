@@ -87,8 +87,29 @@ static const size_t SIZE_CLASS_BLOCK_COUNT[] = {
 /**
  * @brief Returns the page index of the ptr.
  */
-static inline uint64_t get_page_index(void *ptr) {
+static inline uint64_t round_down_page_index(void *ptr) {
     return ((uint64_t)ptr) >> PAGE_SHIFT;
+}
+
+/**
+ * @brief Returns the page index rounded up.
+ */
+static inline uint64_t round_up_page_index(void *ptr) {
+    return ((uint64_t)ptr + PAGE_SIZE - 1) >> PAGE_SHIFT;
+}
+
+/**
+ * @brief Rounds number up to nearest multiple of page.
+ */
+static inline uint64_t round_up_page(uint64_t num) {
+   return (num + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
+}
+
+/**
+ * @brief Rounds number down to nearest multiple of page.
+ */
+static inline uint64_t round_down_page(uint64_t num) {
+   return num & ~(PAGE_SIZE - 1);
 }
 
 /**

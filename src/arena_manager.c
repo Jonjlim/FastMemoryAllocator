@@ -30,8 +30,8 @@ void *cmalloc_alloc_metadata(size_t size) {
         }
     }
 
-    if (!meta_arena || (intptr_t) meta_arena->cur + (intptr_t) size
-        > (intptr_t) meta_arena->end) {
+    if (!meta_arena || (intptr_t) meta_arena->end - (intptr_t) meta_arena->cur
+        < (intptr_t) size) {
         meta_chunk_t *prev = meta_arena;
         meta_arena = mmap(NULL,
             META_CHUNK_SIZE,
@@ -39,6 +39,9 @@ void *cmalloc_alloc_metadata(size_t size) {
             MAP_PRIVATE | MAP_ANONYMOUS,
             -1,
             0);
+        if (meta_arena == MAP_FAILED) {
+            return NULL;
+        }
         meta_arena->prev = prev;
         meta_arena->cur = align_up_ptr((char *) meta_arena + sizeof(meta_chunk_t));
         meta_arena->end = (char *) meta_arena + META_CHUNK_SIZE;
@@ -55,9 +58,7 @@ void cmalloc_free_metadata(void *ptr, size_t size) {
     }
     void **cur = ptr;
     void **head = cmalloc_get(free_list_map, size);
-    if (head) {
-        *cur = head;
-    }
+    *cur = head;
     cmalloc_map(free_list_map, ptr, size);
 }
 
