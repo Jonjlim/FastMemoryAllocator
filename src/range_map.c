@@ -6,7 +6,8 @@
 
 #include <assert.h>
 #include <stdlib.h>
-#include <sys/mman.h>
+
+#include "arena_manager.h"
 
 #define L1_BITS 12
 #define L2_BITS 12
@@ -29,16 +30,7 @@ typedef struct l1_trie_node_struct {
 } l1_node;
 
 range_map_t *cmalloc_initialize_range_map() {
-    return mmap(NULL,
-    sizeof(l1_node),
-    PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS,
-    -1,
-    0);
-}
-
-void cmalloc_destroy_range_map(range_map_t *range_map) {
-    munmap(range_map, sizeof(l1_node));
+    return cmalloc_alloc_metadata(sizeof(l1_node));
 }
 
 void cmalloc_map(range_map_t *range_map, void *value, uint64_t key) {
@@ -49,20 +41,10 @@ void cmalloc_map(range_map_t *range_map, void *value, uint64_t key) {
     u_int64_t l3_index = (i) & (L3_SIZE - 1);
 
     if (!(l1->l1)[l1_index]) {
-        (l1->l1)[l1_index] = mmap(NULL,
-        sizeof(l2_node),
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1,
-        0);
+        (l1->l1)[l1_index] = cmalloc_alloc_metadata(sizeof(l2_node));
     }
     if (!((l1->l1)[l1_index]->l2[l2_index])) {
-        (l1->l1)[l1_index]->l2[l2_index] = mmap(NULL,
-        sizeof(l3_node),
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1,
-        0);
+        (l1->l1)[l1_index]->l2[l2_index] = cmalloc_alloc_metadata(sizeof(l3_node));
         (l1->l1)[l1_index]->count++;
     }
     if ((l1->l1)[l1_index]->l2[l2_index]->l3[l3_index] == NULL)
@@ -83,12 +65,12 @@ void cmalloc_unmap(range_map_t *range_map, uint64_t key) {
     (l1->l1)[l1_index]->l2[l2_index]->l3[l3_index] = NULL;
     (l1->l1)[l1_index]->l2[l2_index]->count--;
     if ((l1->l1)[l1_index]->l2[l2_index]->count == 0) {
-        munmap((l1->l1)[l1_index]->l2[l2_index], sizeof(l3_node));
+        cmalloc_free_metadata((l1->l1)[l1_index]->l2[l2_index], sizeof(l3_node));
         (l1->l1)[l1_index]->l2[l2_index] = NULL;
         (l1->l1)[l1_index]->count--;
     }
     if ((l1->l1)[l1_index]->count == 0) {
-        munmap((l1->l1)[l1_index], sizeof(l2_node));
+        cmalloc_free_metadata((l1->l1)[l1_index], sizeof(l2_node));
         (l1->l1)[l1_index] = NULL;
     }
 }
