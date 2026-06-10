@@ -58,11 +58,3 @@ void cmalloc_uninitialize_span(span_t *span) {
 span_t *cmalloc_get_span(void *ptr) {
     return cmalloc_get(page_map, round_down_page_index(ptr));
 }
-
-size_t cmalloc_calculate_span_size(size_t requested_size, int size_class_index) {
-    if (size_class_index != LARGE_CLASS_SIZE_INDEX) {
-        return SIZE_CLASS_SPAN_SIZE[size_class_index];
-    } else {
-        return ((requested_size + (BYTE_ALIGNMENT - 1)) & ~(BYTE_ALIGNMENT - 1));
-    }
-}

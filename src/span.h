@@ -37,10 +37,6 @@ void cmalloc_uninitialize_span(span_t *span);
  * @brief Gets the span that a ptr belongs to.
  */
 span_t *cmalloc_get_span(void *ptr);
-/**
- * @brief Calculates the size of the span based on user block size requested.
- */
-size_t cmalloc_calculate_span_size(size_t requested_size, int size_class_index);
 
 /**
  * @brief Returns the size of a span's metadata.
