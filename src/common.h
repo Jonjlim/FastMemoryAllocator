@@ -43,7 +43,6 @@ static inline int get_system_page_shift() {
 #include <stdint.h>
 
 #define BYTE_ALIGNMENT 16
-#define MAX_FREE_SPAN_COUNT 3
 #define LARGE_CLASS_SIZE_INDEX -1
 #define MAX_SIZE_CLASS 32768
 static const size_t SIZE_CLASSES[] = {

@@ -145,16 +145,21 @@ void *cmalloc_alloc_data(size_t size) {
     if (page_sequence_map == NULL) page_sequence_map = cmalloc_initialize_range_map();
 
     size_t best_fitting_pages = find_closest_fitting_free_page_sequence(page_count);
-    if (!data_arena && best_fitting_pages != NO_FITTING_PAGE_SEQUENCE) {
+    if (data_arena && best_fitting_pages != NO_FITTING_PAGE_SEQUENCE) {
         if (page_count == best_fitting_pages) {
             page_sequence_t *temp = free_page_sequences[page_count];
             free_page_sequences[page_count] = temp->free_next;
+            if (free_page_sequences[page_count] == NULL)
+                mark_free_page_sequence_empty(page_count);
             temp->is_free = 0;
             return temp->base;
         } else {
             page_sequence_t *best_fit = free_page_sequences[best_fitting_pages];
             free_page_sequences[best_fitting_pages] = best_fit->free_next;
+            if (free_page_sequences[best_fitting_pages] == NULL)
+                mark_free_page_sequence_empty(best_fitting_pages);
             best_fit->is_free = 0;
+            best_fit->page_count = page_count;
 
             page_sequence_t *split = cmalloc_alloc_metadata(sizeof(page_sequence_t));
             split->base = best_fit->base + (page_count << PAGE_SHIFT);
@@ -165,6 +170,7 @@ void *cmalloc_alloc_data(size_t size) {
             split->phys_prev = best_fit;
             split->free_next = free_page_sequences[best_fitting_pages - page_count];
             free_page_sequences[best_fitting_pages - page_count] = split;
+            mark_free_page_sequence_non_empty(best_fitting_pages - page_count);
 
             if (best_fit->phys_next) best_fit->phys_next->phys_prev = split;
             best_fit->phys_next = split;
@@ -197,7 +203,7 @@ void *cmalloc_alloc_data(size_t size) {
         free_page_sequences[DATA_CHUNK_PAGE_COUNT - page_count]->page_count = DATA_CHUNK_PAGE_COUNT - page_count;
         r->phys_prev = NULL;
         r->phys_next = free_page_sequences[DATA_CHUNK_PAGE_COUNT - page_count];
-        free_page_sequences[DATA_CHUNK_PAGE_COUNT - page_count]->phys_prev = free_page_sequences[page_count];
+        free_page_sequences[DATA_CHUNK_PAGE_COUNT - page_count]->phys_prev = r;
         free_page_sequences[DATA_CHUNK_PAGE_COUNT - page_count]->phys_next = NULL;
         free_page_sequences[DATA_CHUNK_PAGE_COUNT - page_count]->is_free = 1;
         mark_free_page_sequence_non_empty(DATA_CHUNK_PAGE_COUNT - page_count);
@@ -207,10 +213,14 @@ void *cmalloc_alloc_data(size_t size) {
 void cmalloc_free_data(void *ptr, size_t size) {
     size_t page_count = round_up_page(size) >> PAGE_SHIFT;
 
-    if (page_count >= MAX_BINNED_PAGES) munmap(ptr, round_up_page(size));
-    
+    if (page_count >= MAX_BINNED_PAGES) {
+        munmap(ptr, round_up_page(size));
+        return;
+    }
+
     page_sequence_t *ps = cmalloc_get(page_sequence_map, round_down_page_index(ptr));
     ps->is_free = 1;
     ps->free_next = free_page_sequences[page_count];
     free_page_sequences[page_count] = ps;
+    mark_free_page_sequence_non_empty(page_count);
 }
