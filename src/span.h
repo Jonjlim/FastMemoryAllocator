@@ -6,11 +6,9 @@
 #define __SPAN_H__
 
 #include "common.h"
-#include <stdio.h>
 
 typedef struct span_struct {
     struct span_struct *next;
-    struct span_struct *prev;
     size_t span_size;
     
     int size_class_index;
@@ -29,7 +27,7 @@ typedef struct span_struct {
  * @brief Initializes a span given an address space.
  * Does not allocate space, space needs to be pre allocated.
  */
-span_t *cmalloc_initialize_span(void *ptr, size_t size, int size_class_index);
+span_t *cmalloc_initialize_span(int size_class_index, size_t requested_size);
 /**
  * @brief Uninitializes a span. Does not sys call unmap though.
  */
@@ -38,16 +36,12 @@ void cmalloc_uninitialize_span(span_t *span);
  * @brief Gets the span that a ptr belongs to.
  */
 span_t *cmalloc_get_span(void *ptr);
-/**
- * @brief Calculates the size of the span based on user block size requested.
- */
-size_t cmalloc_calculate_span_size(size_t requested_size, int size_class_index);
 
 /**
  * @brief Returns the size of a span's metadata.
  */
 static inline size_t get_span_md_size(size_t block_count) {
-    return sizeof(span_t) + (((block_count + (size_t)63) & ~63) >> 3);
+    return align_up(sizeof(span_t) + (((block_count + (size_t)63) & ~63) >> 3));
 }
 /**
  * @brief Returns a free block and marks it as allocated.
