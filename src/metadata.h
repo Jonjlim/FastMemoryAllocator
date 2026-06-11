@@ -2,8 +2,8 @@
  * @author Jonathon Lim
  */
 
-#ifndef __ARENA_MANAGER_H__
-#define __ARENA_MANAGER_H__
+#ifndef __METADATA_H__
+#define __METADATA_H__
 
 #include <stdlib.h>
 
@@ -20,8 +20,5 @@ void *cmalloc_alloc_metadata(size_t size);
  * memory arena by cacheing the metadata of that size in a free list.
  */
 void cmalloc_free_metadata(void *ptr, size_t size);
-
-void *cmalloc_alloc_data(size_t size);
-void cmalloc_free_data(void *ptr, size_t size);
 
 #endif

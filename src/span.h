@@ -8,7 +8,7 @@
 #include "common.h"
 
 typedef struct span_struct {
-    struct span_struct *next;
+    struct span_struct *next_in_bin;
     size_t span_size;
     
     int size_class_index;
