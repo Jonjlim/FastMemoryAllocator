@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "arena_manager.h"
+#include "metadata.h"
 
 #define L1_BITS 12
 #define L2_BITS 12

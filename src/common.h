@@ -45,6 +45,7 @@ static inline int get_system_page_shift() {
 #define BYTE_ALIGNMENT 16
 #define LARGE_CLASS_SIZE_INDEX -1
 #define MAX_SIZE_CLASS 32768
+#define MAX_SPAN_BLOCK_COUNT 4096 // SHOULDN'T EVER BE BIGGER THAN 4096 WITHOUT SOME REFACTORING
 static const size_t SIZE_CLASSES[] = {
     16,   32,   48,   64,   80,   96,   112,  128,
     144,  160,  176,  192,  208,  224,  240,  256,
