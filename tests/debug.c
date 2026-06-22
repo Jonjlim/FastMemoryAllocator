@@ -72,7 +72,7 @@ int main() {
     cfree(large_alloc);
     printf("Success:\n");
 
-    printf("\nLarge mallocing 100x:\n");
+    printf("\nMallocing 100 times:\n");
     void *ptrs[100];
     for (int i = 0; i < 100; i++) {
         ptrs[i] = cmalloc(65536 * i);
