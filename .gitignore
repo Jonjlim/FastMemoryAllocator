@@ -39,3 +39,6 @@ build/
 bin/
 obj/
 lib/
+
+# Agent
+.claude/

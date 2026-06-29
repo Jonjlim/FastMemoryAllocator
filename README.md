@@ -94,6 +94,31 @@ Run the debug test:
 make d
 ```
 
+Run the realistic benchmark suite (cmalloc vs the system `malloc` across
+real-world allocation patterns: request handling, parse-tree build/teardown,
+object pools, working sets, producer/consumer queues, and string churn):
+
+```sh
+make bench
+```
+
+Run the micro-benchmark, which isolates the optimized allocation and free
+paths so the speedups can be attributed to specific changes:
+
+```sh
+make mb
+```
+
+Run both benchmarks back to back:
+
+```sh
+make benchmarks
+```
+
+On an Apple Silicon (M-series) machine, `make bench` reports a geometric-mean
+speedup of roughly 2.2x over the system allocator across the realistic suite,
+clearing the project target of being at least 10% faster than `malloc`.
+
 Clean build artifacts:
 
 ```sh
