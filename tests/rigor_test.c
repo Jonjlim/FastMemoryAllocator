@@ -10,6 +10,7 @@
 #include <time.h>
 
 #include <cmalloc/cmalloc.h>
+#include "bench_allocators.h"
 
 #ifndef OPS
 #define OPS 300000
@@ -344,26 +345,19 @@ static double run_random_stress(alloc_fn alloc, free_fn dealloc) {
   return elapsed;
 }
 
-static void print_time_cmp(const char *label,
-                           double malloc_sec,
-                           double cmalloc_sec) {
-  if (malloc_sec <= 0.0) {
-    printf("%-28s  malloc %.3fs  cmalloc %.3fs  (n/a)\n",
-           label,
-           malloc_sec,
-           cmalloc_sec);
-    return;
-  }
+static void print_bench_header(const bench_allocator_t *allocs, size_t n) {
+  bench_print_table_header(allocs, n, "benchmark", 28);
+}
 
-  double pct = (cmalloc_sec / malloc_sec) * 100.0;
-  printf("%-28s  malloc %.3fs  cmalloc %.3fs  cmalloc %.1f%% of malloc\n",
-         label,
-         malloc_sec,
-         cmalloc_sec,
-         pct);
+static void print_bench_row(const char *label, size_t n, const double *secs) {
+  bench_print_table_row(label, 28, n, secs);
 }
 
 int main(void) {
+  bench_allocator_t allocs[BENCH_ALLOCATOR_MAX];
+  size_t n_allocs = bench_allocator_list(allocs, BENCH_ALLOCATOR_MAX);
+  double secs[BENCH_ALLOCATOR_MAX];
+
   static const size_t bench_sizes[] = {
       8, 16, 32, 64, 128, 256, 1024, 4096, 65536};
 
@@ -372,41 +366,51 @@ int main(void) {
          MAX_LIVE,
          MAX_SIZE,
          TIME_BUDGET_SEC);
-  printf("Percent = cmalloc time as %% of malloc (lower is faster for cmalloc)\n\n");
+  printf("Comparing allocators against cmalloc");
+#ifdef HAVE_MIMALLOC
+  printf(", mimalloc");
+#endif
+#ifdef HAVE_JEMALLOC
+  printf(", jemalloc");
+#endif
+#ifdef HAVE_TCMALLOC
+  printf(", tcmalloc");
+#endif
+  printf("\n");
+  bench_print_format_legend();
 
   printf("alignment (correctness)\n");
   run_alignment_test(malloc, free);
   run_alignment_test(cmalloc, cfree);
   printf("  malloc and cmalloc: passed\n\n");
 
-  printf("benchmark                    malloc      cmalloc     cmalloc %% of malloc\n");
-  printf("--------------------------------------------------------------------------\n");
+  print_bench_header(allocs, n_allocs);
 
   for (size_t i = 0; i < sizeof(bench_sizes) / sizeof(bench_sizes[0]); i++) {
     size_t size = bench_sizes[i];
     char label[32];
     snprintf(label, sizeof(label), "fixed size %6zu", size);
 
-    double malloc_sec = run_size_class_bench(malloc, free, size);
-    double cmalloc_sec = run_size_class_bench(cmalloc, cfree, size);
-    print_time_cmp(label, malloc_sec, cmalloc_sec);
+    for (size_t a = 0; a < n_allocs; a++) {
+      secs[a] = run_size_class_bench(allocs[a].alloc, allocs[a].free_fn, size);
+    }
+    print_bench_row(label, n_allocs, secs);
   }
 
   {
-    double malloc_sec = run_fragmentation_test(malloc, free);
-    double cmalloc_sec = run_fragmentation_test(cmalloc, cfree);
-    print_time_cmp("fragmentation", malloc_sec, cmalloc_sec);
+    for (size_t a = 0; a < n_allocs; a++) {
+      secs[a] = run_fragmentation_test(allocs[a].alloc, allocs[a].free_fn);
+    }
+    print_bench_row("fragmentation", n_allocs, secs);
   }
 
   {
-    double malloc_sec;
-    double cmalloc_sec;
-
     rng_reset();
-    malloc_sec = run_random_stress(malloc, free);
-    rng_reset();
-    cmalloc_sec = run_random_stress(cmalloc, cfree);
-    print_time_cmp("random stress", malloc_sec, cmalloc_sec);
+    for (size_t a = 0; a < n_allocs; a++) {
+      rng_reset();
+      secs[a] = run_random_stress(allocs[a].alloc, allocs[a].free_fn);
+    }
+    print_bench_row("random stress", n_allocs, secs);
   }
 
   return 0;

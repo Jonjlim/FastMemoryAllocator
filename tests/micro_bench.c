@@ -26,6 +26,7 @@
 #include <time.h>
 
 #include <cmalloc/cmalloc.h>
+#include "bench_allocators.h"
 
 typedef void *(*alloc_fn)(size_t);
 typedef void (*free_fn)(void *);
@@ -105,52 +106,73 @@ static double time_class_sweep(alloc_fn a, free_fn f) {
     return best;
 }
 
+static void print_alloc_header(const bench_allocator_t *allocs, size_t n) {
+    bench_print_dual_table_header(allocs, n, "size", 10, "allocate", "free");
+}
+
+static void print_alloc_row(size_t sz,
+                            size_t n,
+                            const double *alloc_secs,
+                            const double *free_secs) {
+    char label[16];
+    snprintf(label, sizeof(label), "%zu", sz);
+    bench_print_dual_table_row(label, 10, n, alloc_secs, free_secs);
+}
+
 int main(void) {
+    bench_allocator_t allocs[BENCH_ALLOCATOR_MAX];
+    size_t n_allocs = bench_allocator_list(allocs, BENCH_ALLOCATOR_MAX);
+    double alloc_secs[BENCH_ALLOCATOR_MAX];
+    double free_secs[BENCH_ALLOCATOR_MAX];
+    double sweep_secs[BENCH_ALLOCATOR_MAX];
+
     printf("Micro-benchmark: isolated alloc-path and free-path cost "
            "(best of %d)\n", BENCH_RUNS);
-    printf("Speedup = malloc / cmalloc  (higher is better for cmalloc)\n\n");
+    bench_print_format_legend();
 
-    printf("%-10s %14s %14s %9s   %14s %14s %9s\n",
-           "size", "malloc alloc", "cmal alloc", "spd",
-           "malloc free", "cmal free", "spd");
-    printf("------------------------------------------------------------------"
-           "-----------------------------\n");
+    print_alloc_header(allocs, n_allocs);
 
     int alloc_wins = 0, free_wins = 0;
     for (size_t s = 0; s < NSIZES; s++) {
         size_t sz = kSizes[s];
         size_t n = batch_for(sz);
-        double m_alloc, m_free, c_alloc, c_free;
-        time_alloc_free(malloc, free, sz, n, &m_alloc, &m_free);
-        time_alloc_free(cmalloc, cfree, sz, n, &c_alloc, &c_free);
+        for (size_t i = 0; i < n_allocs; i++) {
+            time_alloc_free(allocs[i].alloc, allocs[i].free_fn, sz, n,
+                            &alloc_secs[i], &free_secs[i]);
+        }
 
-        double m_alloc_mops = (double)n / m_alloc / 1e6;
-        double c_alloc_mops = (double)n / c_alloc / 1e6;
-        double m_free_mops = (double)n / m_free / 1e6;
-        double c_free_mops = (double)n / c_free / 1e6;
-        double alloc_spd = m_alloc / c_alloc;
-        double free_spd = m_free / c_free;
+        double alloc_spd = alloc_secs[0] / alloc_secs[1];
+        double free_spd = free_secs[0] / free_secs[1];
         if (alloc_spd >= 1.111) alloc_wins++;
         if (free_spd >= 1.111) free_wins++;
 
-        printf("%-10zu %11.1f Mo %11.1f Mo %8.2fx   %11.1f Mo %11.1f Mo %8.2fx\n",
-               sz, m_alloc_mops, c_alloc_mops, alloc_spd,
-               m_free_mops, c_free_mops, free_spd);
+        print_alloc_row(sz, n_allocs, alloc_secs, free_secs);
     }
 
-    printf("------------------------------------------------------------------"
-           "-----------------------------\n");
-    double m_sweep = time_class_sweep(malloc, free);
-    double c_sweep = time_class_sweep(cmalloc, cfree);
-    printf("all-size-class round-robin sweep: malloc %.4fs  cmalloc %.4fs  "
-           "speedup %.2fx\n", m_sweep, c_sweep, m_sweep / c_sweep);
+    for (size_t i = 0; i < n_allocs; i++) {
+        sweep_secs[i] = time_class_sweep(allocs[i].alloc, allocs[i].free_fn);
+    }
+    bench_print_table_row("round-robin sweep", 19, n_allocs, sweep_secs);
 
-    printf("\nalloc-path size classes >=10%% faster: %d/%zu;  "
-           "free-path size classes >=10%% faster: %d/%zu\n",
-           alloc_wins, NSIZES, free_wins, NSIZES);
+    printf("\ncmalloc vs malloc (>=10%% faster when malloc >= 111.1%% of cmal):\n");
+    printf("  alloc-path size classes: %d/%zu\n", alloc_wins, NSIZES);
+    printf("  free-path size classes:  %d/%zu\n", free_wins, NSIZES);
+    if (n_allocs > 2) {
+        double cm_sweep = sweep_secs[BENCH_CMALLOC_IDX];
+        printf("\nround-robin sweep relative to cmalloc (");
+        bench_print_time(cm_sweep);
+        printf("):\n");
+        for (size_t i = 0; i < n_allocs; i++) {
+            if (i == BENCH_CMALLOC_IDX) {
+                continue;
+            }
+            printf("  %-8s %10.1f%%\n", allocs[i].name,
+                   bench_pct_of_cmalloc(sweep_secs[i], cm_sweep));
+        }
+    }
 
-    int pass = (m_sweep / c_sweep) >= 1.111;
-    printf("TARGET (size-class dispatch >=10%% faster than malloc): %s\n",
+    int pass = bench_pct_of_cmalloc(sweep_secs[0], sweep_secs[1]) >= 111.1;
+    printf("\nTARGET (size-class dispatch >=10%% faster than malloc): %s\n",
            pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

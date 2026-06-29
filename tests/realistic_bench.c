@@ -35,6 +35,7 @@
 #include <time.h>
 
 #include <cmalloc/cmalloc.h>
+#include "bench_allocators.h"
 
 typedef void *(*alloc_fn)(size_t);
 typedef void (*free_fn)(void *);
@@ -315,7 +316,15 @@ static double time_scenario(scenario_fn run, alloc_fn a, free_fn f,
     return best;
 }
 
+static void print_scenario_header(const bench_allocator_t *allocs, size_t n) {
+    bench_print_table_header_ex(allocs, n, "scenario", 20, 1);
+}
+
 int main(void) {
+    bench_allocator_t allocs[BENCH_ALLOCATOR_MAX];
+    size_t n_allocs = bench_allocator_list(allocs, BENCH_ALLOCATOR_MAX);
+    double times[BENCH_ALLOCATOR_MAX];
+
     static scenario_t scenarios[] = {
         {"request_handler",    scen_request_handler,    0x1111ULL},
         {"parse_tree",         scen_parse_tree,         0x2222ULL},
@@ -328,44 +337,41 @@ int main(void) {
     const int n = (int)(sizeof(scenarios) / sizeof(scenarios[0]));
 
     printf("Realistic allocator benchmark  (best of %d runs, target: cmalloc >= "
-           "%.1f%% faster)\n", BENCH_RUNS, (1.0 - 0.90) * 100.0);
-    printf("Speedup = malloc_time / cmalloc_time   (>= %.3fx means >=10%% faster)\n\n",
-           TARGET_SPEEDUP);
-    printf("%-20s %12s %12s %12s %12s   %s\n",
-           "scenario", "malloc(s)", "cmalloc(s)", "malloc Mops", "cmal Mops",
-           "speedup");
-    printf("--------------------------------------------------------------------"
-           "-------------------------\n");
+           "%.1f%% faster than malloc)\n", BENCH_RUNS, (1.0 - 0.90) * 100.0);
+    printf("Pass when malloc column is >= %.1f%% of cmalloc (malloc slower).\n",
+           TARGET_SPEEDUP * 100.0);
+    bench_print_format_legend();
+
+    print_scenario_header(allocs, n_allocs);
 
     double log_speedup_sum = 0.0;
     int wins_10pct = 0;
 
     for (int i = 0; i < n; i++) {
-        uint64_t m_ops = 0, c_ops = 0;
-        double m_t = time_scenario(scenarios[i].run, malloc, free,
-                                   scenarios[i].seed, &m_ops);
-        double c_t = time_scenario(scenarios[i].run, cmalloc, cfree,
-                                   scenarios[i].seed, &c_ops);
-        double speedup = m_t / c_t;
-        double m_mops = (double)m_ops / m_t / 1e6;
-        double c_mops = (double)c_ops / c_t / 1e6;
-        log_speedup_sum += (speedup > 0 ? log(speedup) : 0.0);
-        if (speedup >= TARGET_SPEEDUP) wins_10pct++;
+        uint64_t ops = 0;
+        for (size_t a = 0; a < n_allocs; a++) {
+            times[a] = time_scenario(scenarios[i].run, allocs[a].alloc,
+                                     allocs[a].free_fn, scenarios[i].seed, &ops);
+        }
 
-        printf("%-20s %12.4f %12.4f %12.1f %12.1f   %6.3fx %s\n",
-               scenarios[i].name, m_t, c_t, m_mops, c_mops, speedup,
-               speedup >= TARGET_SPEEDUP ? "PASS" : (speedup >= 1.0 ? "ok" : "SLOW"));
+        double malloc_pct = bench_pct_of_cmalloc(times[0], times[1]);
+        log_speedup_sum += (malloc_pct > 0 ? log(malloc_pct / 100.0) : 0.0);
+        if (malloc_pct >= TARGET_SPEEDUP * 100.0) wins_10pct++;
+
+        const char *verdict =
+            malloc_pct >= TARGET_SPEEDUP * 100.0
+                ? "PASS"
+                : (malloc_pct >= 100.0 ? "ok" : "SLOW");
+        bench_print_table_row_ex(scenarios[i].name, 20, n_allocs, times, verdict);
     }
 
-    double geomean = exp(log_speedup_sum / n);
-    printf("--------------------------------------------------------------------"
-           "-------------------------\n");
-    printf("geometric-mean speedup across %d realistic scenarios: %.3fx "
-           "(cmalloc time = %.1f%% of malloc)\n",
-           n, geomean, 100.0 / geomean);
-    printf("scenarios clearing the >=10%%-faster bar: %d/%d\n", wins_10pct, n);
+    double geomean_pct = exp(log_speedup_sum / n) * 100.0;
+    printf("\ngeometric-mean malloc time across %d scenarios: %.1f%% of cmalloc\n",
+           n, geomean_pct);
+    printf("scenarios clearing the >=10%%-faster bar vs malloc: %d/%d\n",
+           wins_10pct, n);
 
-    int pass = geomean >= TARGET_SPEEDUP;
+    int pass = geomean_pct >= TARGET_SPEEDUP * 100.0;
     printf("\nTARGET (>=10%% faster than system malloc, realistic mix): %s\n",
            pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;

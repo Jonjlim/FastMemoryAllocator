@@ -40,6 +40,30 @@ clean:
 	rm -rf $(OBJ_DIR) $(LIB_DIR)
 
 
+# Optional third-party allocators for benchmark comparisons (mimalloc, jemalloc,
+# tcmalloc). Detected via Homebrew prefix or explicit BREW_PREFIX override.
+BREW_PREFIX ?= $(shell brew --prefix 2>/dev/null)
+BENCH_CPPFLAGS :=
+BENCH_LDFLAGS :=
+
+ifneq ($(BREW_PREFIX),)
+ifneq ($(wildcard $(BREW_PREFIX)/lib/libmimalloc.dylib),)
+  BENCH_CPPFLAGS += -DHAVE_MIMALLOC -I$(BREW_PREFIX)/include
+  BENCH_LDFLAGS += -L$(BREW_PREFIX)/lib -lmimalloc
+endif
+ifneq ($(wildcard $(BREW_PREFIX)/lib/libjemalloc.dylib),)
+  BENCH_CPPFLAGS += -DHAVE_JEMALLOC -I$(BREW_PREFIX)/include
+  BENCH_LDFLAGS += -L$(BREW_PREFIX)/lib -ljemalloc
+  BENCH_LDFLAGS += -ldl
+endif
+ifneq ($(wildcard $(BREW_PREFIX)/lib/libtcmalloc.dylib),)
+  BENCH_CPPFLAGS += -DHAVE_TCMALLOC -I$(BREW_PREFIX)/include
+  BENCH_LDFLAGS += -L$(BREW_PREFIX)/lib -ltcmalloc
+endif
+endif
+
+BENCH_LINK := -L$(LIB_DIR) -l$(LIB_NAME) $(BENCH_LDFLAGS)
+
 # Testing
 TEST_DIR := tests
 TEST_BIN_DIR := tests/bin
@@ -52,7 +76,7 @@ REALISTIC_BENCH := realistic_bench
 MICRO_BENCH := micro_bench
 
 r: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(RIGOR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(RIGOR).c $(BENCH_LINK) -o $(TEST_BIN_DIR)/$(RIGOR)
 	@echo "Running long rigor..."
 	./$(TEST_BIN_DIR)/$(RIGOR)
 
@@ -73,13 +97,13 @@ t: static | bin
 
 # Realistic benchmark suite: cmalloc vs system malloc on real-world patterns.
 bench: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(REALISTIC_BENCH).c -L$(LIB_DIR) -l$(LIB_NAME) -lm -o $(TEST_BIN_DIR)/$(REALISTIC_BENCH)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(REALISTIC_BENCH).c $(BENCH_LINK) -lm -o $(TEST_BIN_DIR)/$(REALISTIC_BENCH)
 	@echo "Running realistic benchmark..."
 	./$(TEST_BIN_DIR)/$(REALISTIC_BENCH)
 
 # Micro-benchmark: isolates the optimized alloc-path and free-path costs.
 mb: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(MICRO_BENCH).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(MICRO_BENCH)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(MICRO_BENCH).c $(BENCH_LINK) -o $(TEST_BIN_DIR)/$(MICRO_BENCH)
 	@echo "Running micro-benchmark..."
 	./$(TEST_BIN_DIR)/$(MICRO_BENCH)
 
