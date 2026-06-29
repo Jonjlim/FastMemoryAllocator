@@ -18,7 +18,7 @@ CPPFLAGS := -I$(INC_DIR)
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all static shared clean t r lr d bench mb benchmarks t_clean
+.PHONY: all static shared clean t r lr d bench mb benchmarks tb ts t_clean
 
 all: static shared
 
@@ -50,6 +50,8 @@ RIGOR := rigor_test
 LONG_RIGOR := long_rigor_test
 REALISTIC_BENCH := realistic_bench
 MICRO_BENCH := micro_bench
+THREAD_BASIC := thread_basic_test
+THREAD_STRESS := thread_stress_bench
 
 r: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(RIGOR)
@@ -85,6 +87,18 @@ mb: static | bin
 
 # Run the full benchmark suite (micro + realistic).
 benchmarks: mb bench
+
+# Short concurrent correctness check.
+tb: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(THREAD_BASIC).c -L$(LIB_DIR) -l$(LIB_NAME) -lpthread -o $(TEST_BIN_DIR)/$(THREAD_BASIC)
+	@echo "Running thread basic test..."
+	./$(TEST_BIN_DIR)/$(THREAD_BASIC)
+
+# Concurrent stress + throughput benchmark.
+ts: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(THREAD_STRESS).c -L$(LIB_DIR) -l$(LIB_NAME) -lpthread -o $(TEST_BIN_DIR)/$(THREAD_STRESS)
+	@echo "Running thread stress benchmark..."
+	./$(TEST_BIN_DIR)/$(THREAD_STRESS)
 
 bin:
 	mkdir -p tests/bin
