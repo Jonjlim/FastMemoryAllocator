@@ -45,7 +45,10 @@ Size classes are defined in `src/common.h`.
 - Each size class also has a precomputed block count.
 
 The allocator uses the first size class that can hold the requested size. For
-example, a 100-byte request maps to the 112-byte class.
+example, a 100-byte request maps to the 112-byte class. Resolution is O(1): a
+lookup table (`cmalloc_size_class_table`, built once at startup) maps each
+16-byte-aligned bucket directly to its class index, replacing a linear scan
+over every class on each allocation.
 
 Each bin stores only spans with available blocks. Fully allocated spans are not
 kept in their bin, which keeps allocation fast for the common case.
@@ -102,6 +105,16 @@ and the map returns the owning `span_t`.
 
 This makes free independent of size-class bins and avoids storing per-block
 headers in user memory.
+
+The system page size and its log2 shift are resolved once at startup (via a
+library constructor calling `cmalloc_runtime_init`) and cached in
+`cmalloc_page_size` / `cmalloc_page_shift`. The page-index math on the free
+path (`round_down_page_index`) therefore reads a cached value rather than
+calling `sysconf` on every `cfree`.
+
+Size-class bins are doubly linked (`next_in_size_class_bin` /
+`prev_in_size_class_bin`), so removing a span that has become full or fully
+free is O(1) instead of a linear walk of the bin.
 
 ## Metadata Allocation
 

@@ -31,6 +31,7 @@ typedef struct span_struct {
     uint64_t block_bitmap[SPAN_BLOCK_BITMAP_WORD_COUNT];
 
     struct span_struct *next_in_size_class_bin;
+    struct span_struct *prev_in_size_class_bin;
 } span_t;
 
 /**

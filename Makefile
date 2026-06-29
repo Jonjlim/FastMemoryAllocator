@@ -18,7 +18,7 @@ CPPFLAGS := -I$(INC_DIR)
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all static shared clean
+.PHONY: all static shared clean t r lr d bench mb benchmarks t_clean
 
 all: static shared
 
@@ -48,6 +48,8 @@ SIMPLE_TEST := simple_test
 DEBUG := debug
 RIGOR := rigor_test
 LONG_RIGOR := long_rigor_test
+REALISTIC_BENCH := realistic_bench
+MICRO_BENCH := micro_bench
 
 r: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(RIGOR)
@@ -68,6 +70,21 @@ t: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(SIMPLE_TEST).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(SIMPLE_TEST)
 	@echo "Running simple test..."
 	./$(TEST_BIN_DIR)/$(SIMPLE_TEST)
+
+# Realistic benchmark suite: cmalloc vs system malloc on real-world patterns.
+bench: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(REALISTIC_BENCH).c -L$(LIB_DIR) -l$(LIB_NAME) -lm -o $(TEST_BIN_DIR)/$(REALISTIC_BENCH)
+	@echo "Running realistic benchmark..."
+	./$(TEST_BIN_DIR)/$(REALISTIC_BENCH)
+
+# Micro-benchmark: isolates the optimized alloc-path and free-path costs.
+mb: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(MICRO_BENCH).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(MICRO_BENCH)
+	@echo "Running micro-benchmark..."
+	./$(TEST_BIN_DIR)/$(MICRO_BENCH)
+
+# Run the full benchmark suite (micro + realistic).
+benchmarks: mb bench
 
 bin:
 	mkdir -p tests/bin
