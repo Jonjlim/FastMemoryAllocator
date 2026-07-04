@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+// #include <pthread.h>
 
 #include "metadata.h"
 
@@ -30,11 +31,29 @@ typedef struct l1_trie_node_struct {
     l2_node *l1[L1_SIZE];
 } l1_node;
 
+// pthread_mutex_t lock;
+
+__attribute__((constructor))
+static void construct(void) {
+    // pthread_mutex_init(&lock, NULL);
+}
+
+__attribute__((destructor))
+static void destruct(void) {
+    // pthread_mutex_destroy(&lock);
+}
+
 range_map_t *cmalloc_initialize_range_map() {
-    return cmalloc_alloc_metadata(sizeof(l1_node));
+    // pthread_mutex_lock(&lock);
+    range_map_t *ptr = cmalloc_alloc_metadata(sizeof(l1_node));
+    // pthread_mutex_unlock(&lock);
+    return ptr;
 }
 
 void cmalloc_map(range_map_t *range_map, void *value, uint64_t key) {
+
+    // pthread_mutex_lock(&lock);
+
     l1_node *l1 = (l1_node *)range_map;
     uint64_t i = key;
     uint64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
@@ -53,9 +72,14 @@ void cmalloc_map(range_map_t *range_map, void *value, uint64_t key) {
     if ((l1->l1)[l1_index]->l2[l2_index]->l3[l3_index] == NULL)
         (l1->l1)[l1_index]->l2[l2_index]->count++;
     (l1->l1)[l1_index]->l2[l2_index]->l3[l3_index] = value;
+
+    // pthread_mutex_unlock(&lock);
 }
 
 void cmalloc_unmap(range_map_t *range_map, uint64_t key) {
+
+    // pthread_mutex_lock(&lock);
+
     l1_node *l1 = (l1_node *)range_map;
     uint64_t i = key;
     uint64_t l1_index = (i >> (L2_BITS + L3_BITS)) & (L1_SIZE - 1);
@@ -76,6 +100,8 @@ void cmalloc_unmap(range_map_t *range_map, uint64_t key) {
         cmalloc_free_metadata((l1->l1)[l1_index], sizeof(l2_node));
         (l1->l1)[l1_index] = NULL;
     }
+
+    // pthread_mutex_unlock(&lock);
 }
 
 void cmalloc_map_range(range_map_t *range_map, void *data, uint64_t from, uint64_t to) {

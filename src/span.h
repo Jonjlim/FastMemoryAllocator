@@ -35,12 +35,12 @@ typedef struct span_struct {
 } span_t;
 
 /**
- * @brief Initializes a span given an address space.
- * Does not allocate space, space needs to be pre allocated.
+ * @brief Allocates space and initializes a span.
  */
 span_t *cmalloc_initialize_span(int size_class_index, size_t requested_size);
 /**
- * @brief Uninitializes a span. Does not sys call unmap though.
+ * @brief Deallocates space and uninitializes a span.
+ * Then caches it.
  */
 void cmalloc_cache_span(span_t *span);
 /**

@@ -33,12 +33,6 @@ static inline int get_system_page_shift() {
     #endif
 }
 
-/*
- * The page size/shift are fixed for the lifetime of the process, but the
- * POSIX query (sysconf) is a real function call. Resolving it on every
- * cfree (via PAGE_SHIFT in round_down_page_index) was a measurable per-free
- * tax. Resolve once at startup into these globals and read them thereafter.
- */
 extern size_t cmalloc_page_size;
 extern int cmalloc_page_shift;
 
