@@ -32,8 +32,12 @@ static inline int get_system_page_shift() {
         return __builtin_ctz((unsigned int)size); // GCC/Clang built-in
     #endif
 }
-#define PAGE_SIZE  get_system_page_size()
-#define PAGE_SHIFT get_system_page_shift()
+
+extern size_t cmalloc_page_size;
+extern int cmalloc_page_shift;
+
+#define PAGE_SIZE  cmalloc_page_size
+#define PAGE_SHIFT cmalloc_page_shift
 #define PAGE_INDEX_BIT_COUNT 64
 #define MMAP_ACCESSABLE_BIT_SIZE 47 // Mmap only returns from the first 47 bits of address
 #define MMAP_ACCESSABLE_BIT_SIZE_POST_BIT_SHIFT 35 // MMAP_ACCESSABLE_BIT_SIZE bit shifted minimum of 12
@@ -84,6 +88,23 @@ static const size_t SIZE_CLASS_BLOCK_COUNT[] = {
 #define SIZE_CLASS_COUNT \
     (sizeof(SIZE_CLASSES) / sizeof(SIZE_CLASSES[0]))
 
+/*
+ * Size-class lookup table. Indexed by ceil(size / BYTE_ALIGNMENT), it maps a
+ * request directly to its size-class index in O(1), replacing a linear scan
+ * over all SIZE_CLASS_COUNT classes on every cmalloc. There are
+ * MAX_SIZE_CLASS / BYTE_ALIGNMENT == 2048 aligned buckets, so the whole table
+ * is ~2 KiB and stays warm in L1. Populated once by cmalloc_runtime_init.
+ */
+#define SIZE_CLASS_TABLE_LEN ((MAX_SIZE_CLASS >> 4) + 1)
+extern unsigned char cmalloc_size_class_table[SIZE_CLASS_TABLE_LEN];
+
+/**
+ * @brief Resolves page size/shift and fills the size-class table. Idempotent.
+ * Invoked from a library constructor so it runs before any allocation; callers
+ * that cannot rely on constructor ordering may call it directly.
+ */
+void cmalloc_runtime_init(void);
+
 /**
  * @brief Returns the page index of the ptr.
  */
@@ -117,12 +138,10 @@ static inline uint64_t round_down_page(uint64_t num) {
  * Returns LARGE_CLASS_SIZE_INDEX if it is too big to fit in any size class.
  */
 static inline int get_size_class_index(size_t size) {
-    for (int i = 0; i < (int) SIZE_CLASS_COUNT; i++) {
-        if (size <= SIZE_CLASSES[i]) {
-            return i;
-        }
+    if (size > MAX_SIZE_CLASS) {
+        return LARGE_CLASS_SIZE_INDEX; // Too big for any size class
     }
-    return LARGE_CLASS_SIZE_INDEX; //Too big
+    return (int) cmalloc_size_class_table[(size + (BYTE_ALIGNMENT - 1)) >> 4];
 }
 
 /**

@@ -2,68 +2,164 @@
  * @author Jonathon Lim
  */
 
-#include <cmalloc/cmalloc.h>
+#include <string.h>
+#include <pthread.h>
 
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <cmalloc/cmalloc.h>
 
 #include "span.h"
 #include "common.h"
 
-static span_t *bins[SIZE_CLASS_COUNT];
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
-static inline void remove_span_from_bin(span_t *target, span_t **head) {
-    if (*head == target) {
-        *head = target->next_in_size_class_bin;
-    } else {
-        span_t *prev = *head;
-        while (prev != NULL && prev->next_in_size_class_bin != target) {
-            prev = prev->next_in_size_class_bin;
-        }
-        if (prev != NULL) {
-            prev->next_in_size_class_bin = target->next_in_size_class_bin;
-        }
+_Thread_local static span_t *thread_local_bin[SIZE_CLASS_COUNT];
+
+size_t cmalloc_page_size = 0;
+int cmalloc_page_shift = 0;
+unsigned char cmalloc_size_class_table[SIZE_CLASS_TABLE_LEN];
+
+pthread_mutex_t lock;
+
+void cmalloc_runtime_init(void) {
+    if (likely(cmalloc_page_size != 0)) {
+        return; // Already initialized.
     }
-    target->next_in_size_class_bin = NULL;
+    cmalloc_page_size = get_system_page_size();
+    cmalloc_page_shift = get_system_page_shift();
+
+    int cls = 0;
+    for (size_t b = 0; b < SIZE_CLASS_TABLE_LEN; b++) {
+        size_t largest_in_bucket = b << 4;
+        while (cls < (int) SIZE_CLASS_COUNT
+               && SIZE_CLASSES[cls] < largest_in_bucket) {
+            cls++;
+        }
+        cmalloc_size_class_table[b] =
+            (unsigned char) (cls < (int) SIZE_CLASS_COUNT ? cls : 0);
+    }
+}
+
+__attribute__((constructor))
+static void cmalloc_constructor(void) {
+    pthread_mutex_init(&lock, NULL);
+    cmalloc_runtime_init();
+}
+
+__attribute__((destructor))
+static void destruct(void) {
+    pthread_mutex_destroy(&lock);
+}
+
+static inline void bin_push(int size_class_index, span_t *span) {
+    span_t *head = thread_local_bin[size_class_index];
+    span->prev_in_size_class_bin = NULL;
+    span->next_in_size_class_bin = head;
+    if (head != NULL) {
+        head->prev_in_size_class_bin = span;
+    }
+    thread_local_bin[size_class_index] = span;
+}
+
+static inline void bin_remove(int size_class_index, span_t *span) {
+    span_t *prev = span->prev_in_size_class_bin;
+    span_t *next = span->next_in_size_class_bin;
+    if (prev != NULL) {
+        prev->next_in_size_class_bin = next;
+    } else {
+        thread_local_bin[size_class_index] = next;
+    }
+    if (next != NULL) {
+        next->prev_in_size_class_bin = prev;
+    }
+    span->prev_in_size_class_bin = NULL;
+    span->next_in_size_class_bin = NULL;
 }
 
 void *cmalloc(size_t size) {
     int size_class_index = get_size_class_index(size);
-    if (size_class_index != LARGE_CLASS_SIZE_INDEX) {
-        if (bins[size_class_index]) {
-            span_t *span = bins[size_class_index];
-            if (span->free_count == 1) {
-                bins[size_class_index] = span->next_in_size_class_bin;
-                span->next_in_size_class_bin = NULL;
+    if (likely(size_class_index != LARGE_CLASS_SIZE_INDEX)) {
+        span_t *span = thread_local_bin[size_class_index];
+        if (likely(span != NULL)) {
+            if (unlikely(span->free_count == 1)) {
+                bin_remove(size_class_index, span);
             }
             return allocate_block(span);
-        } else {
-            span_t *span = cmalloc_initialize_span(size_class_index, size);
-            span->next_in_size_class_bin = NULL;
-            bins[size_class_index] = span;
-            return allocate_block(span);
         }
-    } else {
-        span_t *large_alloc_span = cmalloc_initialize_span(size_class_index, size);
-        return allocate_block(large_alloc_span);
+
+        pthread_mutex_lock(&lock);
+        span = cmalloc_initialize_span(size_class_index, size);
+        pthread_mutex_unlock(&lock);
+
+        bin_push(size_class_index, span);
+        return allocate_block(span);
     }
+
+    pthread_mutex_lock(&lock);
+    span_t *large_alloc_span = cmalloc_initialize_span(size_class_index, size);
+    pthread_mutex_unlock(&lock);
+
+    return allocate_block(large_alloc_span);
 }
 
 void cfree(void *ptr) {
-    if (ptr == NULL) return;
+    if (unlikely(ptr == NULL)) return;
     span_t *span = cmalloc_get_span(ptr);
-    if (span->size_class_index == LARGE_CLASS_SIZE_INDEX) {
+    int size_class_index = span->size_class_index;
+    if (unlikely(size_class_index == LARGE_CLASS_SIZE_INDEX)) {
+
+        pthread_mutex_lock(&lock);
         cmalloc_cache_span(span);
-    } else {
-        if (span->free_count == 0) {
-            span->next_in_size_class_bin = bins[span->size_class_index];
-            bins[span->size_class_index] = span;
-        }
-        free_block(ptr, span);
-        if (span->free_count == span->block_count) {
-            remove_span_from_bin(span, &bins[span->size_class_index]);
-            cmalloc_cache_span(span);
-        }
+        pthread_mutex_unlock(&lock);
+
+        return;
     }
+
+    if (unlikely(span->free_count == 0)) {
+        bin_push(size_class_index, span);
+    }
+    free_block(ptr, span);
+    if (unlikely(span->free_count == span->block_count)) {
+        bin_remove(size_class_index, span);
+        
+        pthread_mutex_lock(&lock);
+        cmalloc_cache_span(span);
+        pthread_mutex_unlock(&lock);
+    }
+}
+
+void *ccalloc(size_t num, size_t size) {
+    if (num != 0 && size > SIZE_MAX / num) {
+        return NULL;
+    }
+    size_t total = num * size;
+    void *ptr = cmalloc(total);
+    if (ptr == NULL) {
+        return NULL;
+    }
+    if (total != 0) {
+        memset(ptr, 0, total);
+    }
+    return ptr;
+}
+
+void *crealloc(void *ptr, size_t size) {
+    if (ptr == NULL) {
+        return cmalloc(size);
+    }
+    if (size == 0) {
+        cfree(ptr);
+        return NULL;
+    }
+    span_t *span = cmalloc_get_span(ptr);
+    if (span->block_size >= size) {
+        return ptr;
+    }
+    void *new_ptr = cmalloc(size);
+    if (new_ptr == NULL) {
+        return NULL;
+    }
+    memcpy(new_ptr, ptr, span->block_size);
+    cfree(ptr);
+    return new_ptr;
 }

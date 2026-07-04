@@ -1,9 +1,9 @@
 # FastMemoryAllocator
 
 FastMemoryAllocator is a small C memory allocator experiment. It provides
-`cmalloc` and `cfree` as alternatives to `malloc` and `free`, with a design
-based on fixed size classes, reusable spans, bitmap-managed blocks, and
-page-to-span lookup.
+`cmalloc`, `ccalloc`, `crealloc`, and `cfree` as alternatives to the C
+standard allocation functions, with a design based on fixed size classes,
+reusable spans, bitmap-managed blocks, and page-to-span lookup.
 
 The project is useful as a learning-oriented allocator implementation and as a
 benchmark target against the system allocator.
@@ -15,25 +15,13 @@ benchmark target against the system allocator.
 - Per-size-class span bins for fast small allocations.
 - Bitmap tracking for free blocks inside each span.
 - Page-index range map so `cfree` can find the owning span without storing
-  headers in user allocations.
+headers in user allocations.
 - Separate metadata arena backed by `mmap`.
 - Reuse of fully freed spans through page-count bins.
+- Basic multi-thread support via per-thread size-class bins and a global lock
+on slow paths (span creation, large allocations, span caching).
 - Static and shared library build targets.
-
-## Current Status
-
-Implemented:
-
-- `void *cmalloc(size_t size)`
-- `void cfree(void *ptr)`
-
-Declared but not implemented yet:
-
-- `void *ccalloc(size_t num, size_t size)`
-- `void *crealloc(void *ptr, size_t size)`
-
-The allocator is currently not thread-safe and does not install itself as the
-process-wide `malloc` implementation.
+- `ccalloc` and `crealloc` built on top of the size-class allocation path.
 
 ## Repository Layout
 
@@ -45,6 +33,8 @@ process-wide `malloc` implementation.
 - `src/common.h` defines size classes, alignment, and page helpers.
 - `tests/` contains correctness, stress, and benchmark-style tests.
 - `doc/ARCHITECTURE.md` describes the allocator internals in more detail.
+
+
 
 ## Build
 
@@ -82,6 +72,14 @@ Run the broader rigor test:
 make r
 ```
 
+Run the multi-threaded rigor benchmark (same workload as `make r`, but with
+concurrent threads; compares cmalloc against malloc, mimalloc, jemalloc, and
+tcmalloc when installed):
+
+```sh
+make tr
+```
+
 Run the longer stress test:
 
 ```sh
@@ -94,6 +92,38 @@ Run the debug test:
 make d
 ```
 
+Run the realistic benchmark suite (cmalloc vs the system `malloc` across
+real-world allocation patterns: request handling, parse-tree build/teardown,
+object pools, working sets, producer/consumer queues, and string churn):
+
+```sh
+make bench
+```
+
+Run the micro-benchmark, which isolates the optimized allocation and free
+paths so the speedups can be attributed to specific changes:
+
+```sh
+make mb
+```
+
+Run both benchmarks back to back:
+
+```sh
+make benchmarks
+```
+
+Run concurrent correctness and stress tests:
+
+```sh
+make tb    # short multi-thread correctness check
+make ts    # concurrent stress + throughput benchmark
+```
+
+On an Apple Silicon (M-series) machine, `make bench` reports a geometric-mean
+speedup of roughly 2.2x over the system allocator across the realistic suite,
+clearing the project target of being at least 10% faster than `malloc`.
+
 Clean build artifacts:
 
 ```sh
@@ -105,6 +135,8 @@ Clean test binaries:
 ```sh
 make t_clean
 ```
+
+
 
 ## Usage
 
@@ -131,6 +163,8 @@ Example compile command after `make static`:
 gcc -Iinclude example.c -Llib -lcmalloc -o example
 ```
 
+
+
 ## Design Overview
 
 Small allocations are rounded up to the nearest size class. Each size class has
@@ -144,6 +178,16 @@ the size class.
 
 Larger allocations use one-block spans. Spans that are small enough to cache are
 returned to the reusable span pool; very large spans are unmapped on free.
+
+`ccalloc(num, size)` checks `num * size` for overflow, allocates through
+`cmalloc`, and zero-fills the requested byte count.
+
+`crealloc(ptr, size)` follows the usual `realloc` contract: `NULL` behaves like
+`cmalloc`, a zero size frees and returns `NULL`, and OOM leaves the original
+pointer intact. When the new size still fits in the current block's size class
+(`span->block_size >= size`), the same pointer is returned with no copy. Growth
+into a larger size class allocates a new block, copies the old block's contents,
+and frees the original.
 
 See `doc/ARCHITECTURE.md` for the detailed internal model.
 
