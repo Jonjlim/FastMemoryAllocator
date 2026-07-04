@@ -2,6 +2,8 @@
  * @author Jonathon Lim
  */
 
+#include <pthread.h>
+
 #include <cmalloc/cmalloc.h>
 
 #include "span.h"
@@ -10,12 +12,13 @@
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-static span_t *bins[SIZE_CLASS_COUNT];
+_Thread_local static span_t *thread_local_bin[SIZE_CLASS_COUNT];
 
-/* Runtime constants resolved once (see common.h). */
 size_t cmalloc_page_size = 0;
 int cmalloc_page_shift = 0;
 unsigned char cmalloc_size_class_table[SIZE_CLASS_TABLE_LEN];
+
+pthread_mutex_t lock;
 
 void cmalloc_runtime_init(void) {
     if (likely(cmalloc_page_size != 0)) {
@@ -42,17 +45,23 @@ void cmalloc_runtime_init(void) {
 
 __attribute__((constructor))
 static void cmalloc_constructor(void) {
+    pthread_mutex_init(&lock, NULL);
     cmalloc_runtime_init();
 }
 
+__attribute__((destructor))
+static void destruct(void) {
+    pthread_mutex_destroy(&lock);
+}
+
 static inline void bin_push(int size_class_index, span_t *span) {
-    span_t *head = bins[size_class_index];
+    span_t *head = thread_local_bin[size_class_index];
     span->prev_in_size_class_bin = NULL;
     span->next_in_size_class_bin = head;
     if (head != NULL) {
         head->prev_in_size_class_bin = span;
     }
-    bins[size_class_index] = span;
+    thread_local_bin[size_class_index] = span;
 }
 
 static inline void bin_remove(int size_class_index, span_t *span) {
@@ -61,7 +70,7 @@ static inline void bin_remove(int size_class_index, span_t *span) {
     if (prev != NULL) {
         prev->next_in_size_class_bin = next;
     } else {
-        bins[size_class_index] = next;
+        thread_local_bin[size_class_index] = next;
     }
     if (next != NULL) {
         next->prev_in_size_class_bin = prev;
@@ -73,20 +82,26 @@ static inline void bin_remove(int size_class_index, span_t *span) {
 void *cmalloc(size_t size) {
     int size_class_index = get_size_class_index(size);
     if (likely(size_class_index != LARGE_CLASS_SIZE_INDEX)) {
-        span_t *span = bins[size_class_index];
+        span_t *span = thread_local_bin[size_class_index];
         if (likely(span != NULL)) {
-            // Last free block hands the span out full: drop it from the bin.
             if (unlikely(span->free_count == 1)) {
                 bin_remove(size_class_index, span);
             }
             return allocate_block(span);
         }
+
+        pthread_mutex_lock(&lock);
         span = cmalloc_initialize_span(size_class_index, size);
+        pthread_mutex_unlock(&lock);
+
         bin_push(size_class_index, span);
         return allocate_block(span);
     }
 
+    pthread_mutex_lock(&lock);
     span_t *large_alloc_span = cmalloc_initialize_span(size_class_index, size);
+    pthread_mutex_unlock(&lock);
+
     return allocate_block(large_alloc_span);
 }
 
@@ -95,17 +110,23 @@ void cfree(void *ptr) {
     span_t *span = cmalloc_get_span(ptr);
     int size_class_index = span->size_class_index;
     if (unlikely(size_class_index == LARGE_CLASS_SIZE_INDEX)) {
+
+        pthread_mutex_lock(&lock);
         cmalloc_cache_span(span);
+        pthread_mutex_unlock(&lock);
+
         return;
     }
 
-    // A full span (not currently binned) becomes available again on this free.
     if (unlikely(span->free_count == 0)) {
         bin_push(size_class_index, span);
     }
     free_block(ptr, span);
     if (unlikely(span->free_count == span->block_count)) {
         bin_remove(size_class_index, span);
+        
+        pthread_mutex_lock(&lock);
         cmalloc_cache_span(span);
+        pthread_mutex_unlock(&lock);
     }
 }
