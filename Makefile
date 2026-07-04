@@ -18,7 +18,7 @@ CPPFLAGS := -I$(INC_DIR)
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all static shared clean t r lr d bench mb benchmarks tb ts t_clean
+.PHONY: all static shared clean t r tr lr d bench mb benchmarks tb ts t_clean
 
 all: static shared
 
@@ -71,6 +71,7 @@ TEST_BIN_DIR := tests/bin
 SIMPLE_TEST := simple_test
 DEBUG := debug
 RIGOR := rigor_test
+THREAD_RIGOR := thread_rigor_test
 LONG_RIGOR := long_rigor_test
 REALISTIC_BENCH := realistic_bench
 MICRO_BENCH := micro_bench
@@ -81,6 +82,11 @@ r: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(RIGOR).c $(BENCH_LINK) -o $(TEST_BIN_DIR)/$(RIGOR)
 	@echo "Running long rigor..."
 	./$(TEST_BIN_DIR)/$(RIGOR)
+
+tr: static | bin
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(THREAD_RIGOR).c $(BENCH_LINK) -lpthread -o $(TEST_BIN_DIR)/$(THREAD_RIGOR)
+	@echo "Running thread rigor..."
+	./$(TEST_BIN_DIR)/$(THREAD_RIGOR)
 
 lr: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(LONG_RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(LONG_RIGOR)

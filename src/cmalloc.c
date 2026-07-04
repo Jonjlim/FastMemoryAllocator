@@ -2,6 +2,7 @@
  * @author Jonathon Lim
  */
 
+#include <string.h>
 #include <pthread.h>
 
 #include <cmalloc/cmalloc.h>
@@ -27,10 +28,6 @@ void cmalloc_runtime_init(void) {
     cmalloc_page_size = get_system_page_size();
     cmalloc_page_shift = get_system_page_shift();
 
-    /*
-     * Bucket b spans aligned sizes ((b-1)*16, b*16]; the class that serves it
-     * is the smallest class whose capacity covers the bucket's largest size.
-     */
     int cls = 0;
     for (size_t b = 0; b < SIZE_CLASS_TABLE_LEN; b++) {
         size_t largest_in_bucket = b << 4;
@@ -129,4 +126,40 @@ void cfree(void *ptr) {
         cmalloc_cache_span(span);
         pthread_mutex_unlock(&lock);
     }
+}
+
+void *ccalloc(size_t num, size_t size) {
+    if (num != 0 && size > SIZE_MAX / num) {
+        return NULL;
+    }
+    size_t total = num * size;
+    void *ptr = cmalloc(total);
+    if (ptr == NULL) {
+        return NULL;
+    }
+    if (total != 0) {
+        memset(ptr, 0, total);
+    }
+    return ptr;
+}
+
+void *crealloc(void *ptr, size_t size) {
+    if (ptr == NULL) {
+        return cmalloc(size);
+    }
+    if (size == 0) {
+        cfree(ptr);
+        return NULL;
+    }
+    span_t *span = cmalloc_get_span(ptr);
+    if (span->block_size >= size) {
+        return ptr;
+    }
+    void *new_ptr = cmalloc(size);
+    if (new_ptr == NULL) {
+        return NULL;
+    }
+    memcpy(new_ptr, ptr, span->block_size);
+    cfree(ptr);
+    return new_ptr;
 }
