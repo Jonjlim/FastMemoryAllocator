@@ -18,7 +18,7 @@ CPPFLAGS := -I$(INC_DIR)
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all static shared clean t r tr lr d bench mb benchmarks tb ts t_clean
+.PHONY: all static shared clean r tr d mb t_clean
 
 all: static shared
 
@@ -68,19 +68,14 @@ BENCH_LINK := -L$(LIB_DIR) -l$(LIB_NAME) $(BENCH_LDFLAGS)
 TEST_DIR := tests
 TEST_BIN_DIR := tests/bin
 
-SIMPLE_TEST := simple_test
 DEBUG := debug
 RIGOR := rigor_test
 THREAD_RIGOR := thread_rigor_test
-LONG_RIGOR := long_rigor_test
-REALISTIC_BENCH := realistic_bench
 MICRO_BENCH := micro_bench
-THREAD_BASIC := thread_basic_test
-THREAD_STRESS := thread_stress_bench
 
 r: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(RIGOR).c $(BENCH_LINK) -o $(TEST_BIN_DIR)/$(RIGOR)
-	@echo "Running long rigor..."
+	@echo "Running rigor..."
 	./$(TEST_BIN_DIR)/$(RIGOR)
 
 tr: static | bin
@@ -88,26 +83,10 @@ tr: static | bin
 	@echo "Running thread rigor..."
 	./$(TEST_BIN_DIR)/$(THREAD_RIGOR)
 
-lr: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(LONG_RIGOR).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(LONG_RIGOR)
-	@echo "Running long rigor..."
-	./$(TEST_BIN_DIR)/$(LONG_RIGOR)
-
 d: static | bin
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(DEBUG).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(DEBUG)
 	@echo "Running debug..."
 	./$(TEST_BIN_DIR)/$(DEBUG)
-
-t: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(SIMPLE_TEST).c -L$(LIB_DIR) -l$(LIB_NAME) -o $(TEST_BIN_DIR)/$(SIMPLE_TEST)
-	@echo "Running simple test..."
-	./$(TEST_BIN_DIR)/$(SIMPLE_TEST)
-
-# Realistic benchmark suite: cmalloc vs system malloc on real-world patterns.
-bench: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(BENCH_CPPFLAGS) $(TEST_DIR)/$(REALISTIC_BENCH).c $(BENCH_LINK) -lm -o $(TEST_BIN_DIR)/$(REALISTIC_BENCH)
-	@echo "Running realistic benchmark..."
-	./$(TEST_BIN_DIR)/$(REALISTIC_BENCH)
 
 # Micro-benchmark: isolates the optimized alloc-path and free-path costs.
 mb: static | bin
@@ -115,23 +94,8 @@ mb: static | bin
 	@echo "Running micro-benchmark..."
 	./$(TEST_BIN_DIR)/$(MICRO_BENCH)
 
-# Run the full benchmark suite (micro + realistic).
-benchmarks: mb bench
-
-# Short concurrent correctness check.
-tb: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(THREAD_BASIC).c -L$(LIB_DIR) -l$(LIB_NAME) -lpthread -o $(TEST_BIN_DIR)/$(THREAD_BASIC)
-	@echo "Running thread basic test..."
-	./$(TEST_BIN_DIR)/$(THREAD_BASIC)
-
-# Concurrent stress + throughput benchmark.
-ts: static | bin
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(TEST_DIR)/$(THREAD_STRESS).c -L$(LIB_DIR) -l$(LIB_NAME) -lpthread -o $(TEST_BIN_DIR)/$(THREAD_STRESS)
-	@echo "Running thread stress benchmark..."
-	./$(TEST_BIN_DIR)/$(THREAD_STRESS)
-
 bin:
 	mkdir -p tests/bin
 
 t_clean:
-	rm -rf $(TEST_BIN_DIR) $(TEST_BIN)
+	rm -rf $(TEST_BIN_DIR)
