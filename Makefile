@@ -18,7 +18,7 @@ CPPFLAGS := -I$(INC_DIR)
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all static shared clean r tr d mb t_clean
+.PHONY: all static shared clean r tr d mb suite suite_clean t_clean
 
 all: static shared
 
@@ -96,6 +96,21 @@ mb: static | bin
 
 bin:
 	mkdir -p tests/bin
+
+# mimalloc-bench: industry-standard suite comparing cmalloc against the system
+# allocator, mimalloc, jemalloc, and tcmalloc. Clones the upstream suite on
+# first use. Pass ARGS to select benchmarks, e.g. ARGS="--tests cfrac".
+MIMALLOC_BENCH_DIR := extern/mimalloc-bench
+
+$(MIMALLOC_BENCH_DIR):
+	mkdir -p extern
+	git clone --depth 1 https://github.com/daanx/mimalloc-bench.git $@
+
+suite: $(MIMALLOC_BENCH_DIR)
+	python3 bench/run_bench.py $(ARGS)
+
+suite_clean:
+	rm -rf bench/build bench/results
 
 t_clean:
 	rm -rf $(TEST_BIN_DIR)

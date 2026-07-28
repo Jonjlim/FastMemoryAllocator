@@ -129,16 +129,22 @@ static inline span_t *alloc_span(size_t size) {
             return best_fit;
         }
     } else {
+        size_t chunk_page_count = DATA_CHUNK_PAGE_COUNT;
+        if (page_count > chunk_page_count) {
+            chunk_page_count = page_count;
+        }
+
         data_chunk_t *prev = data_arena;
         data_arena = cmalloc_alloc_metadata(sizeof(data_chunk_t));
         data_arena->prev = prev;
         data_arena->base = mmap(NULL,
-            DATA_CHUNK_SIZE,
+            chunk_page_count << PAGE_SHIFT,
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE | MAP_ANONYMOUS,
             -1,
             0);
         if (data_arena->base == MAP_FAILED) {
+            data_arena = prev;
             return NULL;
         }
         span_t *fit = cmalloc_alloc_metadata(sizeof(span_t));
@@ -149,20 +155,27 @@ static inline span_t *alloc_span(size_t size) {
         cmalloc_map_range(page_map, fit, round_down_page_index(fit->base),
             round_down_page_index(fit->base) + fit->page_count);
 
-        span_t *split = cmalloc_alloc_metadata(sizeof(span_t));
-        split->base = data_arena->base + (page_count << PAGE_SHIFT);
-        split->next_in_uninitialized_bin = NULL;
-        split->page_count = DATA_CHUNK_PAGE_COUNT - page_count;
-        split->is_initialized = 0;
-        cmalloc_map_range(page_map, split, round_down_page_index(split->base),
-            round_down_page_index(split->base) + split->page_count);
-
         fit->phys_prev = NULL;
-        fit->phys_next = split;
-        split->phys_prev = fit;
-        split->phys_next = NULL;
-        mark_binned_span_non_empty(DATA_CHUNK_PAGE_COUNT - page_count);
-        uninitilized_span_bin[DATA_CHUNK_PAGE_COUNT - page_count] = split;
+        fit->phys_next = NULL;
+
+        size_t remaining_pages = chunk_page_count - page_count;
+        if (remaining_pages > 0 && remaining_pages < MAX_BINNED_PAGES) {
+            span_t *split = cmalloc_alloc_metadata(sizeof(span_t));
+            split->base = data_arena->base + (page_count << PAGE_SHIFT);
+            split->page_count = remaining_pages;
+            split->is_initialized = 0;
+            cmalloc_map_range(page_map, split, round_down_page_index(split->base),
+                round_down_page_index(split->base) + split->page_count);
+
+            fit->phys_next = split;
+            split->phys_prev = fit;
+            split->phys_next = NULL;
+
+            split->next_in_uninitialized_bin =
+                uninitilized_span_bin[remaining_pages];
+            uninitilized_span_bin[remaining_pages] = split;
+            mark_binned_span_non_empty(remaining_pages);
+        }
         return fit;
     }
 }

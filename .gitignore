@@ -43,3 +43,8 @@ lib/
 # Agent
 .claude/
 .cursor/
+
+# Benchmark suite: upstream sources and generated output
+extern/
+bench/build/
+bench/results/
